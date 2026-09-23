@@ -145,3 +145,11 @@ button { cursor: pointer; }
 .sekme-ikon { position: relative; display: grid; place-items: center; }
 .rozet { position: absolute; top: -.35rem; right: -.7rem; min-width: 1.05rem; height: 1.05rem; padding: 0 .25rem; border-radius: .6rem; background: var(--vurgu); color: var(--vurgu-yazi); font-size: .65rem; font-weight: 700; display: grid; place-items: center; }
 .nokta { position: absolute; top: -.1rem; right: -.3rem; width: .45rem; height: .45rem; border-radius: 50%; background: var(--vurgu); }
+
+/* ------------------------------------------------ seçim (notu yazan) */
+.secim { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
+.secenek { display: flex; flex-direction: column; align-items: center; gap: .1rem; padding: .7rem .4rem; border-radius: var(--yaricap);
+  border: 1px solid var(--cizgi); background: var(--yuzey); font-weight: 500; }
+.secenek.secili { border-color: var(--vurgu); background: color-mix(in srgb, var(--vurgu-yumusak) 40%, var(--yuzey)); font-weight: 600; }
+.secenek:disabled { opacity: .45; }
+.secenek small { font-size: .68rem; color: var(--soluk-yazi); font-weight: 400; }

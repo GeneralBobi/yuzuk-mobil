@@ -33,7 +33,10 @@ export interface Ayarlar {
   vault?: string;
   vaultAdi?: string;
   altKlasor: string;
+  yazici: string; // notu yazan AI: claude | codex | gemini
 }
+
+export const YAZICILAR: Record<string, string> = { claude: "Claude", codex: "ChatGPT", gemini: "Gemini" };
 
 const ASAMA: Record<string, string> = {
   sirada: "Sırada",
@@ -54,7 +57,8 @@ function oku<T>(anahtar: string, varsayilan: T): T {
 }
 
 class Hat {
-  ayarlar: Ayarlar = oku("ayarlar", { sunucu: VARSAYILAN_SUNUCU, anahtar: "", altKlasor: "Yüzük" });
+  ayarlar: Ayarlar = { ...{ sunucu: VARSAYILAN_SUNUCU, anahtar: "", altKlasor: "Yüzük", yazici: "claude" }, ...oku<Partial<Ayarlar>>("ayarlar", {}) };
+  kuruluYazicilar: string[] | null = null; // sunucunun bilgisayarında kurulu olanlar
   oturumlar: Oturum[] = oku("oturumlar", []);
   kaydediyor = false;
   kayitBaslangic: number | null = null;
@@ -145,7 +149,9 @@ class Hat {
       if (r.status === 401) return "Anahtar geçersiz";
       if (!r.ok) return `Sunucu ${r.status} döndü`;
       const j = await r.json();
-      return `Bağlı · karar modeli ${j.laya} · yazıya dökme ${j.stt}`;
+      this.kuruluYazicilar = Object.keys(j.yazicilar ?? {});
+      this.yayinla();
+      return `Bağlı · konuşmanın tamamı notu yazan araca gider · yazıya dökme ${j.stt}`;
     } catch {
       return "Sunucuya ulaşılamadı. Bilgisayar kapalı ya da internet yok; kayıtlar telefonda bekler.";
     }
@@ -259,7 +265,7 @@ class Hat {
     o.hata = undefined;
     this.yayinla();
     try {
-      const alanlar: Record<string, string> = { baslangic: o.baslangic };
+      const alanlar: Record<string, string> = { baslangic: o.baslangic, yazici: this.ayarlar.yazici || "claude" };
       if (o.baslik) alanlar.baslik = o.baslik;
       const r = await yerel.yukle({ yol: o.yol, url: `${this.ayarlar.sunucu}/v1/oturum`, anahtar: this.ayarlar.anahtar, alanlar });
       if (r.durum !== 200) throw new Error(`Sunucu ${r.durum}: ${r.govde.slice(0, 160)}`);

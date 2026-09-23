@@ -3,7 +3,7 @@ import { App as CapApp } from "@capacitor/app";
 import {
   AlertCircle, Check, CircleDashed, FileAudio, FolderOpen, Link2, Mic, NotebookPen, RotateCw, Settings, Square, Trash2, UploadCloud,
 } from "lucide-react";
-import { hat, type Oturum } from "./hat";
+import { hat, YAZICILAR, type Oturum } from "./hat";
 
 type Sekme = "dinle" | "notlar" | "ayarlar";
 
@@ -241,6 +241,22 @@ function Ayarlar() {
           </button>
         </li>
       </ol>
+
+      <div className="bolum">
+        <h2 className="bolum-basligi">Notu yazan</h2>
+        <div className="secim" role="radiogroup" aria-label="Notu yazan AI">
+          {Object.entries(YAZICILAR).map(([id, ad]) => {
+            const kurulu = !hat.kuruluYazicilar || hat.kuruluYazicilar.includes(id);
+            return (
+              <button key={id} role="radio" aria-checked={a.yazici === id} disabled={!kurulu}
+                className={`secenek ${a.yazici === id ? "secili" : ""}`} onClick={() => hat.ayarla({ yazici: id })}>
+                {ad}{!kurulu && <small>kurulu değil</small>}
+              </button>
+            );
+          })}
+        </div>
+        <p className="ikincil">Konuşmanın tamamı bilgisayarındaki bu araca gider, notu o yazar. Mahrem cümleler önce çıkarılır.</p>
+      </div>
 
       <div className="bolum">
         <button className="dugme ikincil-dugme" onClick={async () => setTest(await hat.baglantiDene())} disabled={!eslesti}>
