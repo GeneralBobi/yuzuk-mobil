@@ -1,0 +1,315 @@
+package app.claudian.yuzuk;
+
+import android.Manifest;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.Context;
+import android.content.Intent;
+import android.database.Cursor;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.OpenableColumns;
+
+import androidx.activity.result.ActivityResult;
+import androidx.documentfile.provider.DocumentFile;
+
+import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
+import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
+
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
+import java.util.UUID;
+
+/**
+ * Web katmanının yapamadığı işler: kilitli ekranda kayıt, Obsidian klasörüne yazma (SAF — Android'de başka
+ * uygulamanın klasörüne yazmanın Play kurallarına uygun tek yolu), büyük ses dosyasını akışla yükleme, bildirim.
+ */
+@CapacitorPlugin(
+        name = "Yuzuk",
+        permissions = {
+                @Permission(alias = "mikrofon", strings = {Manifest.permission.RECORD_AUDIO}),
+                @Permission(alias = "bildirim", strings = {"android.permission.POST_NOTIFICATIONS"})
+        })
+public class YuzukEklentisi extends Plugin {
+
+    // ------------------------------------------------ izin
+
+    @PluginMethod
+    public void izinIste(PluginCall call) {
+        if (getPermissionState("mikrofon") == PermissionState.GRANTED
+                && (Build.VERSION.SDK_INT < 33 || getPermissionState("bildirim") == PermissionState.GRANTED)) {
+            call.resolve(sonuc("mikrofon", true));
+            return;
+        }
+        String[] istenen = Build.VERSION.SDK_INT >= 33 ? new String[]{"mikrofon", "bildirim"} : new String[]{"mikrofon"};
+        requestPermissionForAliases(istenen, call, "izinSonucu");
+    }
+
+    @PermissionCallback
+    private void izinSonucu(PluginCall call) {
+        // Mikrofon şart; bildirim reddedilse de kayıt çalışır.
+        call.resolve(sonuc("mikrofon", getPermissionState("mikrofon") == PermissionState.GRANTED));
+    }
+
+    // ------------------------------------------------ kayıt
+
+    @PluginMethod
+    public void kayitBaslat(PluginCall call) {
+        File hedef = new File(getContext().getFilesDir(), "kayit_" + System.currentTimeMillis() + ".m4a");
+        Intent i = new Intent(getContext(), KayitServisi.class).putExtra(KayitServisi.YOL, hedef.getAbsolutePath());
+        getContext().startForegroundService(i);
+        // Servis MediaRecorder'ı başlatana kadar kısa bekle; durumu çağıran kontrol eder.
+        long son = System.currentTimeMillis() + 1500;
+        while (!KayitServisi.calisiyor && KayitServisi.sonHata == null && System.currentTimeMillis() < son) {
+            try { Thread.sleep(50); } catch (InterruptedException ignored) { }
+        }
+        call.resolve(sonuc("yol", hedef.getAbsolutePath()));
+    }
+
+    @PluginMethod
+    public void kayitDurdur(PluginCall call) {
+        String yol = KayitServisi.yol;
+        long bas = KayitServisi.baslangicMs;
+        getContext().stopService(new Intent(getContext(), KayitServisi.class));
+        long son = System.currentTimeMillis() + 1500;
+        while (KayitServisi.calisiyor && System.currentTimeMillis() < son) {
+            try { Thread.sleep(50); } catch (InterruptedException ignored) { }
+        }
+        JSObject r = new JSObject();
+        File f = yol != null ? new File(yol) : null;
+        r.put("yol", f != null && f.exists() && f.length() > 2000 ? yol : null);
+        r.put("sureSn", bas > 0 ? (System.currentTimeMillis() - bas) / 1000 : 0);
+        KayitServisi.yol = null;
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void kayitDurumu(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("calisiyor", KayitServisi.calisiyor);
+        r.put("baslangicMs", KayitServisi.baslangicMs);
+        r.put("seviye", KayitServisi.seviye());
+        r.put("hata", KayitServisi.sonHata);
+        call.resolve(r);
+    }
+
+    // ------------------------------------------------ dosya
+
+    @PluginMethod
+    public void dosyaSec(PluginCall call) {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+                .putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"audio/*", "video/*"});
+        startActivityForResult(call, i, "dosyaSecildi");
+    }
+
+    @ActivityCallback
+    private void dosyaSecildi(PluginCall call, ActivityResult sonuc) {
+        Uri uri = sonuc.getData() != null ? sonuc.getData().getData() : null;
+        if (uri == null) {
+            JSObject r = new JSObject();
+            r.put("yol", null);
+            r.put("ad", null);
+            call.resolve(r);
+            return;
+        }
+        new Thread(() -> {
+            try {
+                String ad = gorunenAd(uri);
+                String uzanti = ad != null && ad.contains(".") ? ad.substring(ad.lastIndexOf('.')) : ".m4a";
+                File hedef = new File(getContext().getFilesDir(), "ice_" + System.currentTimeMillis() + uzanti);
+                try (InputStream in = getContext().getContentResolver().openInputStream(uri);
+                     OutputStream out = new java.io.FileOutputStream(hedef)) {
+                    byte[] b = new byte[1 << 16];
+                    int n;
+                    while ((n = in.read(b)) > 0) out.write(b, 0, n);
+                }
+                JSObject r = new JSObject();
+                r.put("yol", hedef.getAbsolutePath());
+                r.put("ad", ad);
+                call.resolve(r);
+            } catch (Exception e) {
+                call.reject("Dosya okunamadı: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private String gorunenAd(Uri uri) {
+        try (Cursor c = getContext().getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (c != null && c.moveToFirst()) return c.getString(0);
+        } catch (Exception ignored) { }
+        return null;
+    }
+
+    @PluginMethod
+    public void dosyaVarMi(PluginCall call) {
+        String yol = call.getString("yol");
+        call.resolve(sonuc("var", yol != null && new File(yol).exists()));
+    }
+
+    @PluginMethod
+    public void dosyaSil(PluginCall call) {
+        String yol = call.getString("yol");
+        if (yol != null && yol.startsWith(getContext().getFilesDir().getAbsolutePath())) new File(yol).delete();
+        call.resolve();
+    }
+
+    // ------------------------------------------------ yükleme
+
+    /** Çok parçalı form, dosya belleğe alınmadan akışla gönderilir (40 dk ≈ 14 MB). */
+    @PluginMethod
+    public void yukle(PluginCall call) {
+        String yol = call.getString("yol");
+        String adres = call.getString("url");
+        String anahtar = call.getString("anahtar");
+        JSObject alanlar = call.getObject("alanlar", new JSObject());
+        new Thread(() -> {
+            HttpURLConnection b = null;
+            try {
+                File f = new File(yol);
+                String sinir = "----yuzuk" + UUID.randomUUID().toString().replace("-", "");
+                b = (HttpURLConnection) new URL(adres).openConnection();
+                b.setRequestMethod("POST");
+                b.setDoOutput(true);
+                b.setConnectTimeout(20000);
+                b.setReadTimeout(120000);
+                b.setChunkedStreamingMode(1 << 16);
+                b.setRequestProperty("Authorization", "Bearer " + anahtar);
+                b.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + sinir);
+                try (OutputStream out = b.getOutputStream()) {
+                    Iterator<String> it = alanlar.keys();
+                    while (it.hasNext()) {
+                        String k = it.next();
+                        yaz(out, "--" + sinir + "\r\nContent-Disposition: form-data; name=\"" + k + "\"\r\n\r\n" + alanlar.getString(k) + "\r\n");
+                    }
+                    yaz(out, "--" + sinir + "\r\nContent-Disposition: form-data; name=\"ses\"; filename=\"" + f.getName()
+                            + "\"\r\nContent-Type: application/octet-stream\r\n\r\n");
+                    try (InputStream in = new FileInputStream(f)) {
+                        byte[] tampon = new byte[1 << 16];
+                        int n;
+                        while ((n = in.read(tampon)) > 0) out.write(tampon, 0, n);
+                    }
+                    yaz(out, "\r\n--" + sinir + "--\r\n");
+                }
+                int durum = b.getResponseCode();
+                InputStream govde = durum < 400 ? b.getInputStream() : b.getErrorStream();
+                StringBuilder sb = new StringBuilder();
+                if (govde != null) {
+                    try (BufferedReader r = new BufferedReader(new InputStreamReader(govde, StandardCharsets.UTF_8))) {
+                        String s;
+                        while ((s = r.readLine()) != null) sb.append(s);
+                    }
+                }
+                JSObject r = new JSObject();
+                r.put("durum", durum);
+                r.put("govde", sb.toString());
+                call.resolve(r);
+            } catch (Exception e) {
+                call.reject(e.getMessage() != null ? e.getMessage() : e.toString());
+            } finally {
+                if (b != null) b.disconnect();
+            }
+        }).start();
+    }
+
+    private static void yaz(OutputStream out, String s) throws java.io.IOException {
+        out.write(s.getBytes(StandardCharsets.UTF_8));
+    }
+
+    // ------------------------------------------------ Obsidian klasörü
+
+    @PluginMethod
+    public void klasorSec(PluginCall call) {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(call, i, "klasorSecildi");
+    }
+
+    @ActivityCallback
+    private void klasorSecildi(PluginCall call, ActivityResult sonuc) {
+        Uri uri = sonuc.getData() != null ? sonuc.getData().getData() : null;
+        JSObject r = new JSObject();
+        if (uri != null) {
+            getContext().getContentResolver().takePersistableUriPermission(uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            DocumentFile d = DocumentFile.fromTreeUri(getContext(), uri);
+            r.put("agac", uri.toString());
+            r.put("ad", d != null ? d.getName() : null);
+        } else {
+            r.put("agac", null);
+            r.put("ad", null);
+        }
+        call.resolve(r);
+    }
+
+    /** yol: "Yüzük/2026-09-23 1300 Başlık.md" — ara klasörler yoksa açılır. ekle=true ise sona eklenir. */
+    @PluginMethod
+    public void dosyaYaz(PluginCall call) {
+        try {
+            DocumentFile dizin = DocumentFile.fromTreeUri(getContext(), Uri.parse(call.getString("agac")));
+            if (dizin == null || !dizin.canWrite()) throw new IllegalStateException("Obsidian klasörüne erişim yok; Ayarlar'dan yeniden seç");
+            String[] parcalar = call.getString("yol").split("/");
+            for (int i = 0; i < parcalar.length - 1; i++) {
+                if (parcalar[i].isEmpty()) continue;
+                DocumentFile alt = dizin.findFile(parcalar[i]);
+                dizin = alt != null && alt.isDirectory() ? alt : dizin.createDirectory(parcalar[i]);
+                if (dizin == null) throw new IllegalStateException("klasör açılamadı: " + parcalar[i]);
+            }
+            String ad = parcalar[parcalar.length - 1];
+            DocumentFile var = dizin.findFile(ad);
+            // octet-stream: sağlayıcı ".md" adına kendi uzantısını eklemesin
+            DocumentFile dosya = var != null ? var : dizin.createFile("application/octet-stream", ad);
+            if (dosya == null) throw new IllegalStateException("dosya açılamadı: " + ad);
+            String kip = Boolean.TRUE.equals(call.getBoolean("ekle", false)) && var != null ? "wa" : "wt";
+            try (OutputStream out = getContext().getContentResolver().openOutputStream(dosya.getUri(), kip)) {
+                out.write(call.getString("icerik", "").getBytes(StandardCharsets.UTF_8));
+            }
+            call.resolve(sonuc("ad", dosya.getName() != null ? dosya.getName() : ad));
+        } catch (Exception e) {
+            call.reject(e.getMessage() != null ? e.getMessage() : e.toString());
+        }
+    }
+
+    // ------------------------------------------------ bildirim
+
+    @PluginMethod
+    public void bildir(PluginCall call) {
+        NotificationManager nm = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm.getNotificationChannel("not") == null) {
+            nm.createNotificationChannel(new NotificationChannel("not", "Hazır notlar", NotificationManager.IMPORTANCE_DEFAULT));
+        }
+        String metin = call.getString("metin", "");
+        Notification n = new Notification.Builder(getContext(), "not")
+                .setContentTitle(call.getString("baslik", "Yüzük"))
+                .setContentText(metin)
+                .setStyle(new Notification.BigTextStyle().bigText(metin))
+                .setSmallIcon(android.R.drawable.ic_menu_edit)
+                .setAutoCancel(true)
+                .build();
+        nm.notify((int) (System.currentTimeMillis() % 100000), n);
+        call.resolve();
+    }
+
+    private static JSObject sonuc(String k, Object v) {
+        JSObject r = new JSObject();
+        r.put(k, v);
+        return r;
+    }
+}
