@@ -21,6 +21,8 @@ export interface YuzukEklentisi {
   klasorSec(): Promise<{ agac: string | null; ad: string | null }>;
   dosyaYaz(o: { agac: string; yol: string; icerik: string; ekle: boolean }): Promise<{ ad: string }>;
   bildir(o: { baslik: string; metin: string }): Promise<void>;
+  hatirlaticiKur(o: { id: string; zamanMs: number; baslik: string; metin: string }): Promise<{ kuruldu: boolean }>;
+  hatirlaticiSayisi(): Promise<{ sayi: number }>;
 }
 
 export const yerel = registerPlugin<YuzukEklentisi>("Yuzuk");

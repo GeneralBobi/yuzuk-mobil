@@ -307,6 +307,26 @@ public class YuzukEklentisi extends Plugin {
         call.resolve();
     }
 
+    // ------------------------------------------------ hatırlatıcı
+
+    /** Nottaki tarihli işi telefonda kurar; zamanı geçmişse kurmaz. */
+    @PluginMethod
+    public void hatirlaticiKur(PluginCall call) {
+        try {
+            long zaman = call.getLong("zamanMs", 0L);
+            if (zaman <= System.currentTimeMillis()) { call.resolve(sonuc("kuruldu", false)); return; }
+            HatirlaticiAlici.kur(getContext(), call.getString("id"), zaman, call.getString("baslik", "Yüzük"), call.getString("metin", ""));
+            call.resolve(sonuc("kuruldu", true));
+        } catch (Exception e) {
+            call.reject(e.getMessage() != null ? e.getMessage() : e.toString());
+        }
+    }
+
+    @PluginMethod
+    public void hatirlaticiSayisi(PluginCall call) {
+        call.resolve(sonuc("sayi", HatirlaticiAlici.sayi(getContext())));
+    }
+
     private static JSObject sonuc(String k, Object v) {
         JSObject r = new JSObject();
         r.put(k, v);

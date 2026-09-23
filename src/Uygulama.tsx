@@ -191,6 +191,7 @@ function OturumKarti({ o }: { o: Oturum }) {
       </div>
       <h3 className="oturum-baslik">{ad}</h3>
       {o.ozet && <p className="oturum-ozet">{o.ozet}</p>}
+      {!!o.hatirlatici && <p className="oturum-ozet">{o.hatirlatici} hatırlatıcı telefonda kuruldu</p>}
       {menu && (
         <div className="oturum-eylem" onClick={(e) => e.stopPropagation()}>
           {o.durum !== "yazildi" && (

@@ -24,6 +24,7 @@ export interface Oturum {
   notAdi?: string;
   sureSn?: number;
   ozet?: string; // notun ilk başlıkları, listede gösterilir
+  hatirlatici?: number; // telefonda kurulan hatırlatıcı sayısı
 }
 
 export interface Ayarlar {
@@ -332,6 +333,16 @@ class Hat {
       const satirlar = hat.map((h) => `- [ ] ${h.metin} 📅 ${h.tarih} · [[${ad.replace(/\.md$/, "")}]]\n`).join("");
       await yerel.dosyaYaz({ agac: this.ayarlar.vault!, yol: `${alt}/Yüzük Hatırlatıcıları.md`, icerik: satirlar, ekle: true });
     }
+    // Tarihli işler telefonda hatırlatıcı olur: o gün sabah 09:00 (saat notta yazıyorsa o gün yine sabah uyarır).
+    let kurulan = 0;
+    for (const [k, h] of hat.entries()) {
+      const [y, a, g] = h.tarih.split("-").map(Number);
+      if (!y || !a || !g) continue;
+      const zaman = new Date(y, a - 1, g, 9, 0, 0).getTime();
+      const r = await yerel.hatirlaticiKur({ id: `${o.id}-${k}`, zamanMs: zaman, baslik: h.metin, metin: `${baslik} · ${h.tarih}` }).catch(() => null);
+      if (r?.kuruldu) kurulan++;
+    }
+    o.hatirlatici = kurulan;
     await yerel.bildir({
       baslik: `Not hazır · ${baslik}`,
       metin: hat.length ? `${hat.length} hatırlatıcı: ${hat.map((h) => `${h.tarih} ${h.metin}`).join(" · ")}` : `Obsidian → ${alt}`,
