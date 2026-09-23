@@ -112,14 +112,20 @@ class Hat {
   }
 
   /** Tek kullanımlık kodla sunucudan anahtarı alır. Kod bir kez kullanılınca biter. */
+  private sonKod: string | null = null;
+
   async eslestir(kod: string) {
+    const temiz = kod.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    // Aynı kurulum bağlantısı açılışta iki yoldan gelir (getLaunchUrl + appUrlOpen); kod tek kullanımlık.
+    if (temiz === this.sonKod) return;
+    this.sonKod = temiz;
     this.eslestirme = { durum: "bekliyor", metin: "Eşleştiriliyor…" };
     this.yayinla();
     try {
       const r = await fetch(`${this.ayarlar.sunucu || VARSAYILAN_SUNUCU}/v1/eslestir`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kod: kod.trim() }),
+        body: JSON.stringify({ kod: temiz }),
       });
       if (r.status === 403) throw new Error("Kod geçersiz ya da kullanılmış");
       if (!r.ok) throw new Error(`Sunucu ${r.status}`);
@@ -278,7 +284,13 @@ class Hat {
       if (!r.ok) throw new Error(`Sunucu ${r.status}`);
       const j = await r.json();
       if (j.durum === "hazir") {
-        await this.obsidianaYaz(o, j.sonuc);
+        if (j.sonuc?.not_md?.trim()) {
+          await this.obsidianaYaz(o, j.sonuc);
+        } else {
+          // Konuşma yoksa vault'a boş dosya yazılmaz.
+          o.ozet = "Not alınacak konuşma bulunamadı; vault'a bir şey yazılmadı.";
+          o.baslik = o.baslik ?? "Sessiz kayıt";
+        }
         await fetch(`${this.ayarlar.sunucu}/v1/oturum/${o.sunucuId}`, { method: "DELETE", headers: this.basliklar }).catch(() => undefined);
         o.durum = "yazildi";
         o.asama = undefined;

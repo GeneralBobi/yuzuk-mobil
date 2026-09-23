@@ -177,7 +177,7 @@ function OturumKarti({ o }: { o: Oturum }) {
       case "sunucuda":
         return { ikon: <CircleDashed size={16} />, metin: o.hata ?? o.asama ?? "İşleniyor", ton: o.hata ? "uyari" : "" };
       case "yazildi":
-        return { ikon: <Check size={16} />, metin: "Obsidian'a yazıldı", ton: "tamam" };
+        return { ikon: <Check size={16} />, metin: o.notAdi ? "Obsidian'a yazıldı" : "Konuşma bulunamadı", ton: o.notAdi ? "tamam" : "" };
       default:
         return { ikon: <AlertCircle size={16} />, metin: o.hata ?? "Hata", ton: "hata" };
     }
