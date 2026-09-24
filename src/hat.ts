@@ -7,7 +7,8 @@
 
 import { yerel } from "./yerel";
 
-export const VARSAYILAN_SUNUCU = "https://yuzuk.claudian.app";
+// Telefon yalnız bulutu bilir (24.09.2026): bulut işi hesabın işlem düğümüne yönlendirir.
+export const VARSAYILAN_SUNUCU = "https://yuzuk-api.claudian.app";
 
 export type Durum = "yerel" | "gonderiliyor" | "sunucuda" | "yazildi" | "hata";
 
@@ -25,6 +26,33 @@ export interface Oturum {
   sureSn?: number;
   ozet?: string; // notun ilk başlıkları, listede gösterilir
   hatirlatici?: number; // telefonda kurulan hatırlatıcı sayısı
+  kisi?: number; // ortamda konuşan kişi sayısı (ses izinden)
+  senPayi?: number; // konuşmanın kullanıcıya ait oranı, 0..1 (ses izi kayıtlıysa)
+  yazan?: string; // notu yazan araç (yedeğe geçtiyse o)
+  yedek?: string; // seçilen ama çalışmayan araç
+}
+
+export interface SesIzi {
+  var: boolean;
+  olusturuldu?: string;
+  konusma_sn?: number;
+  tutarlilik?: number;
+  uyari?: string | null;
+}
+
+export interface HesapBilgisi {
+  hesap: string;
+  cihaz: string;
+  cihazlar: { id: string; ad: string | null; son_gorulme: string | null; bu: boolean }[];
+  bu_ay: { is_sayisi: number; dakika: number };
+}
+
+/** Oturumun dört duraklı yolu: telefonda · bulutta · yazılıyor · Obsidian'da. */
+export function durak(o: Oturum): number {
+  if (o.durum === "yazildi") return 3;
+  if (o.durum === "sunucuda") return o.asama === "Sırada" ? 1 : 2;
+  if (o.durum === "gonderiliyor") return 1;
+  return 0;
 }
 
 export interface Ayarlar {
@@ -43,6 +71,7 @@ const ASAMA: Record<string, string> = {
   "modeller yukleniyor": "Modeller hazırlanıyor",
   "yaziya dokuluyor": "Yazıya dökülüyor",
   "not yaziliyor": "Not yazılıyor",
+  "konusmacilar ayriliyor": "Konuşmacılar ayrılıyor",
 };
 
 type Dinleyici = () => void;
@@ -63,8 +92,14 @@ class Hat {
   kaydediyor = false;
   kayitBaslangic: number | null = null;
   seviye = 0;
+  okuma = 0; // her 250 ms'lik düzey okumasında artar: halka aynı düzeyi de yeni bir çizgi olarak işler
   uyari: string | null = null;
   eslestirme: { durum: "bekliyor" | "tamam" | "hata"; metin: string } | null = null;
+  sesIzi: SesIzi | null = null;
+  sesKaydi: "yok" | "kayitta" | "isleniyor" = "yok";
+  sesHatasi: string | null = null;
+  hesap: HesapBilgisi | null = null;
+  baglanti: { durum: "bilinmiyor" | "bagli" | "kapali" | "anahtar"; metin: string } = { durum: "bilinmiyor", metin: "" };
 
   private dinleyiciler = new Set<Dinleyici>();
   private yoklama: number | null = null;
@@ -100,6 +135,7 @@ class Hat {
     for (const o of this.oturumlar) if (o.durum === "gonderiliyor") o.durum = "yerel";
     this.sakla();
     void this.ilerlet();
+    void this.baglantiDene().then(() => Promise.all([this.sesIziYukle(), this.hesapYukle()]));
   }
 
   // ---------------- ayarlar ----------------
@@ -130,13 +166,14 @@ class Hat {
       const r = await fetch(`${this.ayarlar.sunucu || VARSAYILAN_SUNUCU}/v1/eslestir`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kod: temiz }),
+        body: JSON.stringify({ kod: temiz, ad: "Android telefon" }),
       });
       if (r.status === 403) throw new Error("Kod geçersiz ya da kullanılmış");
       if (!r.ok) throw new Error(`Sunucu ${r.status}`);
       const j = await r.json();
       this.ayarla({ sunucu: j.sunucu, anahtar: j.anahtar });
       this.eslestirme = { durum: "tamam", metin: "Eşleşti" };
+      void this.baglantiDene();
     } catch (e) {
       this.eslestirme = { durum: "hata", metin: `Eşleşmedi: ${(e as Error).message}` };
     }
@@ -144,17 +181,118 @@ class Hat {
   }
 
   async baglantiDene(): Promise<string> {
+    const sonuc = (durum: Hat["baglanti"]["durum"], metin: string) => {
+      this.baglanti = { durum, metin };
+      this.yayinla();
+      return metin;
+    };
+    if (!this.ayarlar.anahtar) return sonuc("bilinmiyor", "");
     try {
       const r = await fetch(`${this.ayarlar.sunucu}/v1/saglik`, { headers: this.basliklar });
-      if (r.status === 401) return "Anahtar geçersiz";
-      if (!r.ok) return `Sunucu ${r.status} döndü`;
+      if (r.status === 401) return sonuc("anahtar", "Bu telefonun anahtarı artık geçmiyor. Masaüstünden yeniden eşleştir.");
+      if (r.status === 503) return sonuc("kapali", ((await r.json().catch(() => ({}))) as { detail?: string }).detail ?? "İşlem düğümü çevrim dışı. Kayıtlar telefonda bekler.");
+      if (!r.ok) return sonuc("kapali", `Bulut ${r.status} döndü. Kayıtlar telefonda bekler.`);
       const j = await r.json();
       this.kuruluYazicilar = Object.keys(j.yazicilar ?? {});
-      this.yayinla();
-      return `Bağlı · konuşmanın tamamı notu yazan araca gider · yazıya dökme ${j.stt}`;
+      if (typeof j.profil === "boolean" && !this.sesIzi) this.sesIzi = { var: j.profil };
+      return sonuc("bagli", j.konusmaci ? "Bağlı · konuşmacılar ayrılıyor" : "Bağlı");
     } catch {
-      return "Sunucuya ulaşılamadı. Bilgisayar kapalı ya da internet yok; kayıtlar telefonda bekler.";
+      return sonuc("kapali", "Buluta ulaşılamadı. İnternet yok gibi; kayıtlar telefonda bekler.");
     }
+  }
+
+  // ---------------- hesap ----------------
+
+  async hesapYukle() {
+    if (!this.ayarlar.anahtar) return;
+    try {
+      const r = await fetch(`${this.ayarlar.sunucu}/v1/hesap`, { headers: this.basliklar });
+      if (r.ok) {
+        this.hesap = await r.json();
+        this.yayinla();
+      }
+    } catch {
+      /* çevrimdışı: son bilinen hâl kalır */
+    }
+  }
+
+  async cihazIptal(id: string) {
+    const r = await fetch(`${this.ayarlar.sunucu}/v1/cihaz/${id}`, { method: "DELETE", headers: this.basliklar }).catch(() => null);
+    if (r?.ok) await this.hesapYukle();
+  }
+
+  // ---------------- ses izi ("sesini tanıt") ----------------
+
+  async sesIziYukle() {
+    if (!this.ayarlar.anahtar) return;
+    try {
+      const r = await fetch(`${this.ayarlar.sunucu}/v1/profil`, { headers: this.basliklar });
+      if (r.ok) {
+        this.sesIzi = await r.json();
+        this.yayinla();
+      }
+    } catch {
+      /* çevrimdışı */
+    }
+  }
+
+  async sesKaydiBaslat() {
+    this.sesHatasi = null;
+    if (this.kaydediyor) {
+      this.sesHatasi = "Önce süren kaydı durdur.";
+      this.yayinla();
+      return;
+    }
+    const izin = await yerel.izinIste();
+    if (!izin.mikrofon) {
+      this.sesHatasi = "Mikrofon izni verilmedi.";
+      this.yayinla();
+      return;
+    }
+    try {
+      await yerel.kayitBaslat();
+      const d = await yerel.kayitDurumu();
+      if (!d.calisiyor) throw new Error(d.hata ?? "kayıt başlamadı");
+      this.sesKaydi = "kayitta";
+      this.kayitBaslangic = d.baslangicMs;
+      this.seviyeIzle();
+    } catch (e) {
+      this.sesHatasi = (e as Error).message;
+    }
+    this.yayinla();
+  }
+
+  /** Okuma kaydı oturum olmaz: yalnız ses izi çıkarılsın diye gider, sonra telefondan da silinir. */
+  async sesKaydiBitir(vazgec = false) {
+    const r = await yerel.kayitDurdur();
+    this.kayitBaslangic = null;
+    this.seviye = 0;
+    if (vazgec || !r.yol) {
+      if (r.yol) await yerel.dosyaSil({ yol: r.yol }).catch(() => undefined);
+      this.sesKaydi = "yok";
+      this.yayinla();
+      return;
+    }
+    this.sesKaydi = "isleniyor";
+    this.yayinla();
+    try {
+      const y = await yerel.yukle({ yol: r.yol, url: `${this.ayarlar.sunucu}/v1/profil`, anahtar: this.ayarlar.anahtar, alanlar: {} });
+      const j = JSON.parse(y.govde || "{}");
+      if (y.durum !== 200) throw new Error(j.detail ?? `Bulut ${y.durum}`);
+      this.sesIzi = j;
+    } catch (e) {
+      this.sesHatasi = (e as Error).message;
+    } finally {
+      await yerel.dosyaSil({ yol: r.yol }).catch(() => undefined);
+      this.sesKaydi = "yok";
+      this.yayinla();
+    }
+  }
+
+  async sesIziSil() {
+    const r = await fetch(`${this.ayarlar.sunucu}/v1/profil`, { method: "DELETE", headers: this.basliklar }).catch(() => null);
+    if (r?.ok) this.sesIzi = { var: false };
+    this.yayinla();
   }
 
   private get basliklar() {
@@ -165,6 +303,7 @@ class Hat {
 
   async kayitBaslat() {
     this.uyari = null;
+    if (this.sesKaydi !== "yok") return;
     const izin = await yerel.izinIste();
     if (!izin.mikrofon) {
       this.uyari = "Mikrofon izni verilmedi. Android ayarlarından Yüzük'e mikrofon izni ver.";
@@ -186,12 +325,13 @@ class Hat {
 
   private seviyeIzle() {
     const tik = async () => {
-      if (!this.kaydediyor) {
+      if (!this.kaydediyor && this.sesKaydi !== "kayitta") {
         this.seviye = 0;
         return;
       }
       const d = await yerel.kayitDurumu().catch(() => null);
       this.seviye = d?.seviye ?? 0;
+      this.okuma++;
       this.yayinla();
       window.setTimeout(tik, 250);
     };
@@ -318,7 +458,17 @@ class Hat {
 
   // ---------------- Obsidian ----------------
 
-  private async obsidianaYaz(o: Oturum, s: { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: string; metin: string }[] }) {
+  private async obsidianaYaz(o: Oturum, s: { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: string; metin: string }[];
+    konusmaci?: { sayi?: number; sen?: boolean; sureler?: Record<string, number> }; yazici?: string; istenen_yazici?: string }) {
+    const k = s.konusmaci;
+    if (k?.sayi) {
+      o.kisi = k.sayi;
+      const toplam = Object.values(k.sureler ?? {}).reduce((a, b) => a + b, 0);
+      if (k.sen && toplam) o.senPayi = (k.sureler?.["Sen"] ?? 0) / toplam;
+    }
+    o.yazan = s.yazici ? (YAZICILAR[s.yazici] ?? s.yazici) : undefined;
+    // Seçilen araç çalışmadıysa not yine yazılır; kimin yerine kimin yazdığı görünür kalır.
+    o.yedek = s.istenen_yazici ? (YAZICILAR[s.istenen_yazici] ?? s.istenen_yazici) : undefined;
     const b = new Date(o.baslangic);
     const iki = (n: number) => String(n).padStart(2, "0");
     const tarih = `${b.getFullYear()}-${iki(b.getMonth() + 1)}-${iki(b.getDate())}`;
@@ -334,7 +484,13 @@ class Hat {
     const yazilan = await yerel.dosyaYaz({ agac: this.ayarlar.vault!, yol: `${alt}/${ad}`, icerik: not, ekle: false });
     o.notAdi = yazilan.ad;
     o.baslik = baslik;
-    o.ozet = (s.not_md ?? "").split("\n").filter((l) => l.startsWith("### ")).map((l) => l.slice(4)).slice(0, 3).join(" · ");
+    // Listede notun kendi özeti görünür: "Özet" başlığı altındaki ilk cümle; yoksa bölüm başlıkları.
+    const satirlar = (s.not_md ?? "").split("\n");
+    const ozetBasi = satirlar.findIndex((l) => /^#{2,4}\s*Özet/i.test(l));
+    const ilk = ozetBasi >= 0 ? satirlar.slice(ozetBasi + 1).find((l) => l.trim() && !l.startsWith("#")) : undefined;
+    o.ozet = ilk
+      ? ilk.replace(/^[-*]\s*/, "").replace(/\*\*/g, "").split(/(?<=[.!?])\s/)[0].slice(0, 180)
+      : satirlar.filter((l) => l.startsWith("### ")).map((l) => l.slice(4)).slice(0, 3).join(" · ");
     if (hat.length) {
       const satirlar = hat.map((h) => `- [ ] ${h.metin} 📅 ${h.tarih} · [[${ad.replace(/\.md$/, "")}]]\n`).join("");
       await yerel.dosyaYaz({ agac: this.ayarlar.vault!, yol: `${alt}/Yüzük Hatırlatıcıları.md`, icerik: satirlar, ekle: true });
