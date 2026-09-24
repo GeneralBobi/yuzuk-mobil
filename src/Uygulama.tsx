@@ -358,6 +358,36 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
           </div>
         </div>
 
+        {a.vault && eslesti && (
+          <div className="satir">
+            <div className="satir-bas">
+              <h2>Bilgisayarla eşitle</h2>
+              <span className={`etiket ${hat.esitleme.durum === "bitti" ? "" : "soluk"}`}>
+                {hat.esitleme.durum === "calisiyor" ? "eşitleniyor" : hat.esitleme.son ? `son: ${gunAdi(hat.esitleme.son).toLocaleLowerCase("tr")} ${saat(hat.esitleme.son)}` : "hiç eşitlenmedi"}
+              </span>
+            </div>
+            <p className="aciklama">
+              Telefondaki vault ile bilgisayarındaki vault karşılıklı eşitlenir. Hangi tarafta değiştiyse o kazanır; ikisi de değiştiyse
+              daha yeni olan. Hiçbir not silinmez, üzerine yazılan sürüm bilgisayarda yedeklenir. Notlar buluttan akarak geçer, saklanmaz.
+            </p>
+            {hat.esitleme.ozet && (
+              <p className="deger">
+                bilgisayar {hat.esitleme.ozet.pc} not · telefon {hat.esitleme.ozet.tel} not
+                {hat.esitleme.ozet.pcEnYeni || hat.esitleme.ozet.telEnYeni
+                  ? ` · en yeni değişiklik ${hat.esitleme.ozet.pcEnYeni >= hat.esitleme.ozet.telEnYeni ? "bilgisayarda" : "telefonda"}` : ""}
+              </p>
+            )}
+            {hat.esitleme.metin && (
+              <p className={hat.esitleme.durum === "hata" ? "hata" : "aciklama"} style={{ marginTop: 6 }}>{hat.esitleme.metin}</p>
+            )}
+            <div className="satir-eylem">
+              <button className="dugme" disabled={hat.esitleme.durum === "calisiyor"} onClick={() => void hat.esitle()}>
+                {hat.esitleme.durum === "calisiyor" ? "Eşitleniyor…" : "Şimdi eşitle"}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="satir">
           <div className="satir-bas">
             <h2>Sesin</h2>

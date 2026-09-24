@@ -24,6 +24,8 @@ export interface YuzukEklentisi {
   hatirlaticiKur(o: { id: string; zamanMs: number; baslik: string; metin: string }): Promise<{ kuruldu: boolean }>;
   hatirlaticiSayisi(): Promise<{ sayi: number }>;
   paylasimAl(): Promise<Paylasim>;
+  vaultListe(o: { agac: string }): Promise<{ dosyalar: { yol: string; boyut: number; mtime: number }[] }>;
+  vaultOku(o: { agac: string; yol: string }): Promise<{ icerik: string }>;
   addListener(olay: "paylasim", dinleyici: (p: Paylasim) => void): Promise<{ remove: () => Promise<void> }>;
 }
 

@@ -349,6 +349,64 @@ public class YuzukEklentisi extends Plugin {
         }
     }
 
+    // ------------------------------------------------ vault eşitleme
+
+    /** Vault'taki .md ve .canvas dosyaları: {yol, boyut, mtime}. Gizli klasörler (.obsidian, .trash…) dışarıda. */
+    @PluginMethod
+    public void vaultListe(PluginCall call) {
+        new Thread(() -> {
+            try {
+                DocumentFile kok = DocumentFile.fromTreeUri(getContext(), Uri.parse(call.getString("agac")));
+                if (kok == null || !kok.canRead()) throw new IllegalStateException("Obsidian klasörüne erişim yok; Ayarlar'dan yeniden seç");
+                com.getcapacitor.JSArray liste = new com.getcapacitor.JSArray();
+                dolas(kok, "", liste);
+                JSObject r = new JSObject();
+                r.put("dosyalar", liste);
+                call.resolve(r);
+            } catch (Exception e) {
+                call.reject(e.getMessage() != null ? e.getMessage() : e.toString());
+            }
+        }).start();
+    }
+
+    private void dolas(DocumentFile dizin, String onek, com.getcapacitor.JSArray liste) {
+        for (DocumentFile f : dizin.listFiles()) {
+            String ad = f.getName();
+            if (ad == null || ad.startsWith(".")) continue;
+            if (f.isDirectory()) {
+                dolas(f, onek + ad + "/", liste);
+            } else if (ad.endsWith(".md") || ad.endsWith(".canvas")) {
+                JSObject d = new JSObject();
+                d.put("yol", onek + ad);
+                d.put("boyut", f.length());
+                d.put("mtime", f.lastModified());
+                liste.put(d);
+            }
+        }
+    }
+
+    @PluginMethod
+    public void vaultOku(PluginCall call) {
+        try {
+            DocumentFile dizin = DocumentFile.fromTreeUri(getContext(), Uri.parse(call.getString("agac")));
+            String[] parcalar = call.getString("yol").split("/");
+            for (int i = 0; i < parcalar.length - 1 && dizin != null; i++) dizin = dizin.findFile(parcalar[i]);
+            DocumentFile f = dizin != null ? dizin.findFile(parcalar[parcalar.length - 1]) : null;
+            if (f == null) throw new IllegalStateException("dosya yok: " + call.getString("yol"));
+            java.io.ByteArrayOutputStream tampon = new java.io.ByteArrayOutputStream();
+            try (InputStream in = getContext().getContentResolver().openInputStream(f.getUri())) {
+                byte[] b = new byte[1 << 16];
+                int n;
+                while ((n = in.read(b)) > 0) tampon.write(b, 0, n);
+            }
+            JSObject r = new JSObject();
+            r.put("icerik", tampon.toString("UTF-8"));
+            call.resolve(r);
+        } catch (Exception e) {
+            call.reject(e.getMessage() != null ? e.getMessage() : e.toString());
+        }
+    }
+
     // ------------------------------------------------ bildirim
 
     @PluginMethod

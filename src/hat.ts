@@ -158,6 +158,90 @@ class Hat {
     }
   }
 
+  // ---------------- vault eşitleme (telefon ↔ bilgisayar, bulut üzerinden) ----------------
+  //
+  // Kurallar: her iki tarafın notlarının SHA-256 izi alınır ve son eşitlemedeki izle karşılaştırılır.
+  //  - yalnız bir tarafta olan not öbür tarafa kopyalanır (silme hiçbir yöne taşınmaz);
+  //  - yalnız bir taraf değiştiyse o taraf kazanır;
+  //  - iki taraf da değiştiyse daha yeni olan kazanır, kaybeden sürüm bilgisayarda .claudian/esitleme-yedek'e girer.
+  // Notlar Worker'dan akarak geçer, bulutta saklanmaz. Yalnız hesabın kendi bilgisayarıyla eşitlenir.
+
+  esitleme: { durum: "yok" | "calisiyor" | "bitti" | "hata"; metin: string; son?: string;
+    ozet?: { pc: number; tel: number; pcEnYeni: number; telEnYeni: number; indirilen: number; gonderilen: number;
+      cakisma: number; ayni: number } } = (() => {
+    const e = oku<Hat["esitleme"]>("esitleme", { durum: "yok", metin: "" });
+    // Uygulama eşitleme sürerken kapandıysa takılı kalmasın.
+    return e.durum === "calisiyor" ? { ...e, durum: "hata" as const, metin: "Önceki eşitleme yarıda kaldı; yeniden dene." } : e;
+  })();
+
+  private async sha(metin: string) {
+    const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(metin));
+    return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+  }
+
+  async esitle() {
+    const agac = this.ayarlar.vault;
+    if (!agac || !this.ayarlar.anahtar || this.esitleme.durum === "calisiyor") return;
+    const guncelle = (e: Partial<Hat["esitleme"]>) => {
+      this.esitleme = { ...this.esitleme, ...e };
+      localStorage.setItem("esitleme", JSON.stringify(this.esitleme));
+      this.yayinla();
+    };
+    guncelle({ durum: "calisiyor", metin: "Bilgisayardaki notlar okunuyor…" });
+    const kok = `${this.ayarlar.sunucu}/v1/vault`;
+    const iz: Record<string, string> = oku("esitleme-izi", {});
+    const yeniIz: Record<string, string> = {};
+    try {
+      const r = await fetch(`${kok}/liste`, { headers: this.basliklar });
+      if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { detail?: string }).detail ?? `Bulut ${r.status}`);
+      const pc = new Map(((await r.json()).dosyalar as { yol: string; sha: string; mtime: number }[]).map((d) => [d.yol, d]));
+      guncelle({ metin: "Telefondaki notlar okunuyor…" });
+      const tel = new Map<string, { yol: string; mtime: number; sha: string; icerik: string }>();
+      for (const d of (await yerel.vaultListe({ agac })).dosyalar) {
+        const icerik = (await yerel.vaultOku({ agac, yol: d.yol })).icerik;
+        tel.set(d.yol, { ...d, icerik, sha: await this.sha(icerik) });
+      }
+      const say = { indirilen: 0, gonderilen: 0, cakisma: 0, ayni: 0 };
+      const indir = async (yol: string) => {
+        const g = await fetch(`${kok}/dosya?yol=${encodeURIComponent(yol)}`, { headers: this.basliklar });
+        if (!g.ok) throw new Error(`${yol} alınamadı (${g.status})`);
+        await yerel.dosyaYaz({ agac, yol, icerik: await g.text(), ekle: false });
+        say.indirilen++;
+      };
+      const gonder = async (yol: string, icerik: string, yedek = false) => {
+        const p = await fetch(`${kok}/dosya?yol=${encodeURIComponent(yol)}${yedek ? "&yedek=1" : ""}`, {
+          method: "PUT", headers: { ...this.basliklar, "Content-Type": "text/markdown; charset=utf-8" }, body: icerik });
+        if (!p.ok) throw new Error(`${yol} gönderilemedi (${p.status})`);
+        if (!yedek) say.gonderilen++;
+      };
+      const yollar = [...new Set([...pc.keys(), ...tel.keys()])].sort();
+      for (const [i, yol] of yollar.entries()) {
+        guncelle({ metin: `Eşitleniyor · ${i + 1}/${yollar.length}` });
+        const p = pc.get(yol), t = tel.get(yol);
+        if (p && !t) { await indir(yol); yeniIz[yol] = p.sha; continue; }
+        if (t && !p) { await gonder(yol, t.icerik); yeniIz[yol] = t.sha; continue; }
+        if (!p || !t) continue;
+        if (p.sha === t.sha) { say.ayni++; yeniIz[yol] = p.sha; continue; }
+        const pcDegisti = p.sha !== iz[yol], telDegisti = t.sha !== iz[yol];
+        if (pcDegisti && !telDegisti) { await indir(yol); yeniIz[yol] = p.sha; }
+        else if (telDegisti && !pcDegisti) { await gonder(yol, t.icerik); yeniIz[yol] = t.sha; }
+        else {
+          say.cakisma++;
+          if (p.mtime >= t.mtime) { await gonder(yol, t.icerik, true); await indir(yol); yeniIz[yol] = p.sha; }
+          else { await gonder(yol, t.icerik); yeniIz[yol] = t.sha; }
+        }
+      }
+      localStorage.setItem("esitleme-izi", JSON.stringify(yeniIz));
+      const enYeni = (m: Map<string, { mtime: number }>) => Math.max(0, ...[...m.values()].map((d) => d.mtime));
+      guncelle({ durum: "bitti", son: new Date().toISOString(),
+        metin: say.indirilen + say.gonderilen ? `${say.indirilen} not bilgisayardan geldi, ${say.gonderilen} not bilgisayara gitti.` : "İki taraf zaten aynı.",
+        ozet: { pc: pc.size, tel: tel.size, pcEnYeni: enYeni(pc), telEnYeni: enYeni(tel), ...say } });
+    } catch (e) {
+      localStorage.setItem("esitleme-izi", JSON.stringify({ ...iz, ...yeniIz }));
+      guncelle({ durum: "hata", metin: (e as Error).message });
+    }
+  }
+
   /** Telefondaki vault'un iskeleti yalnız protokoldür: başlık nasıl açılır, ne nasıl yazılır. Bölümler bilgi geldikçe
    *  oluşur; boş şablon not açılmaz. Dosya zaten varsa (masaüstü kurmuş ya da kullanıcı değiştirmiş) dokunulmaz. */
   async iskeletKur() {
