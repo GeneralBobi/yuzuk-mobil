@@ -90,7 +90,11 @@ export function Uygulama() {
   }, [sekme]);
 
   // Her ekran en üstten açılır (önceki ekranın kaydırması taşınmaz).
-  useEffect(() => window.scrollTo(0, 0), [sekme, akis]);
+  // Gövde süslü parantezli olmalı: yeni Chromium'da scrollTo bir Promise döndürüyor ve efektten dönen değer React'e
+  // temizleme fonksiyonu sanılıyor ("l is not a function", 24.09.2026 Boran'ın telefonunda her ekranda çöktü).
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [sekme, akis]);
 
   const bekleyen = hat.oturumlar.filter((o) => o.durum !== "yazildi").length;
 
