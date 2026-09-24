@@ -1,6 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { App as CapApp } from "@capacitor/app";
-import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Check, FileAudio, Mic, NotebookPen, Settings, Square } from "lucide-react";
 import { durak, hat, YAZICILAR, type Oturum } from "./hat";
 import { Halka } from "./Halka";
@@ -37,8 +36,8 @@ function gunAdi(iso: string) {
   return d.toLocaleDateString("tr-TR", { day: "numeric", month: "long", weekday: "long" });
 }
 
-// Durum geçişleri: 180 ms, ease-out; sistemde "animasyonları kaldır" açıksa hiç hareket yok.
-const gecis = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0 }, transition: { duration: 0.18, ease: [0.16, 1, 0.3, 1] as const } };
+// Ekran geçişlerinde animasyon yok (24.09.2026): Boran'ın telefonunda çıkış animasyonu tamamlanmadı, yeni ekran hiç
+// açılmadı ve siyah ekran kaldı. Ekran anında değişir; hiçbir içerik bir animasyonun bitmesini beklemez.
 
 export function Uygulama() {
   useHat();
@@ -96,21 +95,19 @@ export function Uygulama() {
   const bekleyen = hat.oturumlar.filter((o) => o.durum !== "yazildi").length;
 
   return (
-    <MotionConfig reducedMotion="user">
+    <>
       <div className="kabuk">
         <header className="ust-cubuk">
           <span className="kelime-isareti" aria-label="claudian.app">claudian<span>.</span>app</span>
           <span className="alt-yazi">Yüzük</span>
         </header>
         <main className="icerik">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={akis ?? sekme} {...gecis}>
+          <div key={akis ?? sekme}>
               {akis === "ses" ? <SesiniTanit kapat={() => setAkis(null)} />
                 : sekme === "dinle" ? <Dinle git={setSekme} />
                 : sekme === "notlar" ? <Notlar />
                 : <Ayarlar ac={setAkis} />}
-            </motion.div>
-          </AnimatePresence>
+          </div>
         </main>
         {!akis && (
           <nav className="altbar" aria-label="Gezinme">
@@ -123,7 +120,7 @@ export function Uygulama() {
           </nav>
         )}
       </div>
-    </MotionConfig>
+    </>
   );
 }
 
@@ -231,13 +228,12 @@ function Notlar() {
           <div key={g.gun}>
             <p className="gun">{g.gun}</p>
             <div className="liste">
-              <AnimatePresence initial={false}>
+
                 {g.o.map((o) => (
-                  <motion.div key={o.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
+                  <div key={o.id}>
                     <OturumSatiri o={o} />
-                  </motion.div>
+                  </div>
                 ))}
-              </AnimatePresence>
             </div>
           </div>
         ))
@@ -266,6 +262,7 @@ function OturumSatiri({ o }: { o: Oturum }) {
     o.kisi ? `${o.kisi} kişi` : null,
     o.senPayi !== undefined ? `sen %${Math.round(o.senPayi * 100)}` : null,
     o.hatirlatici ? `${o.hatirlatici} hatırlatıcı` : null,
+    o.mahrem ? `${o.mahrem} cümle mahrem sayılıp çıkarıldı` : null,
     o.yazan ? (o.yedek ? `${o.yedek} çalışmadı, notu ${o.yazan} yazdı` : `notu ${o.yazan} yazdı`) : null,
   ].filter(Boolean);
 

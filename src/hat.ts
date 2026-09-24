@@ -6,6 +6,7 @@
 // Not yazılınca hem telefondaki ses hem sunucudaki sonuç silinir.
 
 import { yerel, type Paylasim } from "./yerel";
+import protokol from "./vault/protokol.md?raw";
 
 // Telefon yalnız bulutu bilir (24.09.2026): bulut işi hesabın işlem düğümüne yönlendirir.
 export const VARSAYILAN_SUNUCU = "https://yuzuk-api.claudian.app";
@@ -30,6 +31,7 @@ export interface Oturum {
   senPayi?: number; // konuşmanın kullanıcıya ait oranı, 0..1 (ses izi kayıtlıysa)
   yazan?: string; // notu yazan araç (yedeğe geçtiyse o)
   yedek?: string; // seçilen ama çalışmayan araç
+  mahrem?: number; // mahrem sayılıp nota gönderilmeyen cümle sayısı (görünür olsun diye)
 }
 
 export interface SesIzi {
@@ -136,6 +138,7 @@ class Hat {
     this.sakla();
     void this.ilerlet();
     void this.baglantiDene().then(() => Promise.all([this.sesIziYukle(), this.hesapYukle()]));
+    void this.iskeletKur();
   }
 
   // ---------------- ayarlar ----------------
@@ -149,7 +152,18 @@ class Hat {
 
   async vaultSec() {
     const r = await yerel.klasorSec();
-    if (r.agac) this.ayarla({ vault: r.agac, vaultAdi: r.ad ?? "vault" });
+    if (r.agac) {
+      this.ayarla({ vault: r.agac, vaultAdi: r.ad ?? "vault" });
+      await this.iskeletKur();
+    }
+  }
+
+  /** Telefondaki vault'un iskeleti yalnız protokoldür: başlık nasıl açılır, ne nasıl yazılır. Bölümler bilgi geldikçe
+   *  oluşur; boş şablon not açılmaz. Dosya zaten varsa (masaüstü kurmuş ya da kullanıcı değiştirmiş) dokunulmaz. */
+  async iskeletKur() {
+    if (!this.ayarlar.vault) return;
+    await yerel.dosyaYaz({ agac: this.ayarlar.vault, yol: "Vault Protokolü.md", icerik: protokol, ekle: false, yoksa: true })
+      .catch(() => undefined);
   }
 
   /** Tek kullanımlık kodla sunucudan anahtarı alır. Kod bir kez kullanılınca biter. */
@@ -486,7 +500,8 @@ class Hat {
   // ---------------- Obsidian ----------------
 
   private async obsidianaYaz(o: Oturum, s: { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: string; saat?: string; metin: string }[];
-    konusmaci?: { sayi?: number; sen?: boolean; sureler?: Record<string, number> }; yazici?: string; istenen_yazici?: string }) {
+    konusmaci?: { sayi?: number; sen?: boolean; sureler?: Record<string, number> }; yazici?: string; istenen_yazici?: string; mahrem?: number }) {
+    o.mahrem = s.mahrem || undefined;
     const k = s.konusmaci;
     if (k?.sayi) {
       o.kisi = k.sayi;
@@ -504,7 +519,8 @@ class Hat {
     const temiz = baslik.replace(/[\\/:*?"<>|#^[\]]/g, " ").replace(/\s+/g, " ").trim();
     const ad = `${tarih} ${iki(b.getHours())}${iki(b.getMinutes())} ${temiz}.md`;
     const hat = s.hatirlaticilar ?? [];
-    let not = `---\nkaynak: yüzük\ntarih: ${tarih} ${saat}\ntags: [yüzük]\n---\n\n# ${baslik}\n\n`;
+    // Not anatomisi Vault Protokolü'ndeki gibi: tags, tür, güncellenme (masaüstündeki Yüzük notlarıyla aynı).
+    let not = `---\ntags: [yüzük]\ntür: log\ngüncellenme: ${tarih}\nkaynak: yüzük\ntarih: ${tarih} ${saat}\n---\n\n# ${baslik}\n\n`;
     not += s.not_md?.trim() ? s.not_md.trim() + "\n" : "_Bu oturumda not alınacak bir şey bulunmadı._\n";
     if (hat.length) not += `\n## Hatırlatıcılar\n${hat.map((h) => `- [ ] ${h.metin}${h.saat ? ` · saat ${h.saat}` : ""} 📅 ${h.tarih}`).join("\n")}\n`;
     const alt = this.ayarlar.altKlasor || "Yüzük";

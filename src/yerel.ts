@@ -19,7 +19,7 @@ export interface YuzukEklentisi {
   dosyaSil(o: { yol: string }): Promise<void>;
   yukle(o: { yol: string; url: string; anahtar: string; alanlar: Record<string, string> }): Promise<{ durum: number; govde: string }>;
   klasorSec(): Promise<{ agac: string | null; ad: string | null }>;
-  dosyaYaz(o: { agac: string; yol: string; icerik: string; ekle: boolean }): Promise<{ ad: string }>;
+  dosyaYaz(o: { agac: string; yol: string; icerik: string; ekle: boolean; yoksa?: boolean }): Promise<{ ad: string; vardi?: boolean }>;
   bildir(o: { baslik: string; metin: string }): Promise<void>;
   hatirlaticiKur(o: { id: string; zamanMs: number; baslik: string; metin: string }): Promise<{ kuruldu: boolean }>;
   hatirlaticiSayisi(): Promise<{ sayi: number }>;

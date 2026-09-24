@@ -328,6 +328,14 @@ public class YuzukEklentisi extends Plugin {
             }
             String ad = parcalar[parcalar.length - 1];
             DocumentFile var = dizin.findFile(ad);
+            // yoksa: yalnız dosya yoksa yaz (vault iskeleti; kullanıcının ya da masaüstünün dosyasına dokunulmaz)
+            if (Boolean.TRUE.equals(call.getBoolean("yoksa", false)) && var != null) {
+                JSObject r = new JSObject();
+                r.put("ad", ad);
+                r.put("vardi", true);
+                call.resolve(r);
+                return;
+            }
             // octet-stream: sağlayıcı ".md" adına kendi uzantısını eklemesin
             DocumentFile dosya = var != null ? var : dizin.createFile("application/octet-stream", ad);
             if (dosya == null) throw new IllegalStateException("dosya açılamadı: " + ad);
