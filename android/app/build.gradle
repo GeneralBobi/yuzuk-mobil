@@ -16,11 +16,25 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Google Play: `gradlew bundleRelease -Pplay` yükleme anahtarıyla (android/keystore.properties, git'e girmez) imzalar.
+    // Elden dağıtılan APK hata ayıklama anahtarında kalır: telefondaki kurulumun üstüne güncellenebilsin.
+    def anahtarDosyasi = rootProject.file("keystore.properties")
+    signingConfigs {
+        if (anahtarDosyasi.exists()) {
+            yukleme {
+                def a = new Properties()
+                anahtarDosyasi.withInputStream { a.load(it) }
+                storeFile rootProject.file(a['storeFile'].replace('../', ''))
+                storePassword a['storePassword']
+                keyAlias a['keyAlias']
+                keyPassword a['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
-            // Play yüklemesine kadar hata ayıklama anahtarıyla imzalanır; önceki Flutter sürümünün üstüne kurulabilsin diye aynı anahtar.
-            signingConfig signingConfigs.debug
+            signingConfig = (project.hasProperty('play') && anahtarDosyasi.exists()) ? signingConfigs.yukleme : signingConfigs.debug
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
