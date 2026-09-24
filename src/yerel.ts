@@ -23,6 +23,15 @@ export interface YuzukEklentisi {
   bildir(o: { baslik: string; metin: string }): Promise<void>;
   hatirlaticiKur(o: { id: string; zamanMs: number; baslik: string; metin: string }): Promise<{ kuruldu: boolean }>;
   hatirlaticiSayisi(): Promise<{ sayi: number }>;
+  paylasimAl(): Promise<Paylasim>;
+  addListener(olay: "paylasim", dinleyici: (p: Paylasim) => void): Promise<{ remove: () => Promise<void> }>;
+}
+
+/** Başka uygulamadan "Paylaş → Yüzük" ile gelen dosya (uygulamanın klasörüne kopyalanmış). */
+export interface Paylasim {
+  yol?: string;
+  ad?: string | null;
+  hata?: string;
 }
 
 export const yerel = registerPlugin<YuzukEklentisi>("Yuzuk");

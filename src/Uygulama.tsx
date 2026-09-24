@@ -4,6 +4,7 @@ import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Check, FileAudio, Mic, NotebookPen, Settings, Square } from "lucide-react";
 import { durak, hat, YAZICILAR, type Oturum } from "./hat";
 import { Halka } from "./Halka";
+import { yerel, type Paylasim } from "./yerel";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
 type Sekme = "dinle" | "notlar" | "ayarlar";
@@ -59,9 +60,17 @@ export function Uygulama() {
       void hat.ilerlet();
       void hat.baglantiDene();
     });
+    // "Paylaş → Yüzük": açılışta bekleyen paylaşım bir kez alınır, uygulama açıkken gelenler dinlenir.
+    const paylas = (p: Paylasim) => {
+      hat.paylasimIsle(p);
+      if (p.yol) setSekme("notlar");
+    };
+    void yerel.paylasimAl().then(paylas).catch(() => undefined);
+    const paylasim = yerel.addListener("paylasim", paylas);
     return () => {
       void dinleyici.then((d) => d.remove());
       void on.then((d) => d.remove());
+      void paylasim.then((d) => d.remove());
     };
   }, []);
 

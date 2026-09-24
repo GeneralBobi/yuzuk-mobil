@@ -132,23 +132,70 @@ public class YuzukEklentisi extends Plugin {
         }
         new Thread(() -> {
             try {
-                String ad = gorunenAd(uri);
-                String uzanti = ad != null && ad.contains(".") ? ad.substring(ad.lastIndexOf('.')) : ".m4a";
-                File hedef = new File(getContext().getFilesDir(), "ice_" + System.currentTimeMillis() + uzanti);
-                try (InputStream in = getContext().getContentResolver().openInputStream(uri);
-                     OutputStream out = new java.io.FileOutputStream(hedef)) {
-                    byte[] b = new byte[1 << 16];
-                    int n;
-                    while ((n = in.read(b)) > 0) out.write(b, 0, n);
-                }
-                JSObject r = new JSObject();
-                r.put("yol", hedef.getAbsolutePath());
-                r.put("ad", ad);
-                call.resolve(r);
+                call.resolve(kopyala(uri));
             } catch (Exception e) {
                 call.reject("Dosya okunamadı: " + e.getMessage());
             }
         }).start();
+    }
+
+    /** İçerik adresindeki dosyayı uygulamanın kendi klasörüne kopyalar: {yol, ad}. */
+    private JSObject kopyala(Uri uri) throws Exception {
+        String ad = gorunenAd(uri);
+        String uzanti = ad != null && ad.contains(".") ? ad.substring(ad.lastIndexOf('.')) : ".m4a";
+        File hedef = new File(getContext().getFilesDir(), "ice_" + System.currentTimeMillis() + uzanti);
+        try (InputStream in = getContext().getContentResolver().openInputStream(uri);
+             OutputStream out = new java.io.FileOutputStream(hedef)) {
+            byte[] b = new byte[1 << 16];
+            int n;
+            while ((n = in.read(b)) > 0) out.write(b, 0, n);
+        }
+        JSObject r = new JSObject();
+        r.put("yol", hedef.getAbsolutePath());
+        r.put("ad", ad);
+        return r;
+    }
+
+    // ------------------------------------------------ başka uygulamadan paylaşım
+
+    /** WhatsApp sesli mesajı, ses kaydedici, video: "Paylaş → Yüzük" ile gelen dosya not olur. */
+    private JSObject bekleyenPaylasim = null;
+
+    @Override
+    public void load() {
+        paylasimIsle(getActivity().getIntent());
+    }
+
+    @Override
+    protected void handleOnNewIntent(Intent intent) {
+        super.handleOnNewIntent(intent);
+        paylasimIsle(intent);
+    }
+
+    private void paylasimIsle(Intent intent) {
+        if (intent == null || !Intent.ACTION_SEND.equals(intent.getAction())) return;
+        Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+        if (uri == null) return;
+        intent.setAction(Intent.ACTION_MAIN); // aynı paylaşım ikinci kez işlenmesin (döndürme, yeniden oluşturma)
+        new Thread(() -> {
+            try {
+                JSObject r = kopyala(uri);
+                bekleyenPaylasim = r;
+                notifyListeners("paylasim", r, true);
+            } catch (Exception e) {
+                JSObject r = new JSObject();
+                r.put("hata", "Paylaşılan dosya okunamadı: " + e.getMessage());
+                notifyListeners("paylasim", r, true);
+            }
+        }).start();
+    }
+
+    /** Açılışta bekleyen paylaşımı bir kez verir (dinleyici kurulmadan önce gelmiş olabilir). */
+    @PluginMethod
+    public void paylasimAl(PluginCall call) {
+        JSObject r = bekleyenPaylasim != null ? bekleyenPaylasim : new JSObject();
+        bekleyenPaylasim = null;
+        call.resolve(r);
     }
 
     private String gorunenAd(Uri uri) {
@@ -184,6 +231,13 @@ public class YuzukEklentisi extends Plugin {
             HttpURLConnection b = null;
             try {
                 File f = new File(yol);
+                if (f.length() > 95_000_000L) {  // bulutun istek sınırı: yarıda kesilmesin, açıkça söylensin
+                    JSObject r = new JSObject();
+                    r.put("durum", 413);
+                    r.put("govde", "{\"detail\": \"Dosya " + (f.length() / 1_000_000L) + " MB; bulut en çok 95 MB kabul ediyor. Videonun yalnız sesini ya da daha kısa bir parçasını gönder.\"}");
+                    call.resolve(r);
+                    return;
+                }
                 String sinir = "----yuzuk" + UUID.randomUUID().toString().replace("-", "");
                 b = (HttpURLConnection) new URL(adres).openConnection();
                 b.setRequestMethod("POST");

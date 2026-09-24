@@ -22,6 +22,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Başka uygulamadan "Paylaş → Yüzük": sesli mesaj, ses kaydı ya da video not olur -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+
             <!-- Kurulum bağlantısı: yuzuk://kur?kod=XXXX (yuzuk.claudian.app/kur sayfasından) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

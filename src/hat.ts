@@ -5,7 +5,7 @@
 // Ses telefonda not Obsidian'a yazılana kadar durur; sunucu hata verirse yeniden gönderilebilir.
 // Not yazılınca hem telefondaki ses hem sunucudaki sonuç silinir.
 
-import { yerel } from "./yerel";
+import { yerel, type Paylasim } from "./yerel";
 
 // Telefon yalnız bulutu bilir (24.09.2026): bulut işi hesabın işlem düğümüne yönlendirir.
 export const VARSAYILAN_SUNUCU = "https://yuzuk-api.claudian.app";
@@ -357,12 +357,24 @@ class Hat {
   async iceAktar() {
     this.uyari = null;
     const r = await yerel.dosyaSec();
-    if (!r.yol) return;
+    if (r.yol) this.dosyaEkle(r.yol, r.ad);
+  }
+
+  /** Seçilen ya da başka uygulamadan paylaşılan dosya bir oturum olur ve hatta girer. */
+  dosyaEkle(yol: string, ad?: string | null) {
+    if (this.oturumlar.some((o) => o.yol === yol)) return;
     const an = Date.now();
-    const baslik = r.ad ? r.ad.replace(/\.[^.]+$/, "") : undefined;
-    this.oturumlar.unshift({ id: String(an), yol: r.yol, baslangic: new Date(an).toISOString(), baslik, kaynak: "ice", durum: "yerel" });
+    const baslik = ad ? ad.replace(/\.[^.]+$/, "") : undefined;
+    this.oturumlar.unshift({ id: String(an), yol, baslangic: new Date(an).toISOString(), baslik, kaynak: "ice", durum: "yerel" });
     this.sakla();
     void this.ilerlet();
+  }
+
+  paylasimIsle(p: Paylasim) {
+    if (p.hata) {
+      this.uyari = p.hata;
+      this.yayinla();
+    } else if (p.yol) this.dosyaEkle(p.yol, p.ad);
   }
 
   // ---------------- hat ----------------
@@ -408,7 +420,22 @@ class Hat {
       const alanlar: Record<string, string> = { baslangic: o.baslangic, yazici: this.ayarlar.yazici || "claude" };
       if (o.baslik) alanlar.baslik = o.baslik;
       const r = await yerel.yukle({ yol: o.yol, url: `${this.ayarlar.sunucu}/v1/oturum`, anahtar: this.ayarlar.anahtar, alanlar });
-      if (r.durum !== 200) throw new Error(`Sunucu ${r.durum}: ${r.govde.slice(0, 160)}`);
+      if (r.durum !== 200) {
+        let neden = r.govde.slice(0, 160);
+        try {
+          neden = JSON.parse(r.govde).detail ?? neden;
+        } catch {
+          /* düz metin */
+        }
+        if (r.durum === 413 || r.durum === 415) {
+          // Tekrar denemek düzeltmez (dosya çok büyük ya da biçim desteklenmiyor): oturum hata olarak durur.
+          o.durum = "hata";
+          o.hata = neden;
+          this.sakla();
+          return;
+        }
+        throw new Error(r.durum === 503 ? neden : `Bulut ${r.durum}: ${neden}`);
+      }
       o.sunucuId = JSON.parse(r.govde).id;
       o.durum = "sunucuda";
       o.asama = "Sırada";
