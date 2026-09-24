@@ -59,7 +59,6 @@ h2 { font: 600 15px/1.3 var(--poppins); margin: 0 0 4px; }
 .aciklama em { font-style: normal; color: var(--yazi); }
 .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .bolum { margin-top: 30px; }
-.bolum-basligi { font: 400 11px/1 var(--mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--soluk); margin: 0 0 4px; }
 .dipnot { margin-top: 34px; font: 400 12px/1.8 var(--lora); color: var(--soluk); }
 .hata { border: 1px solid var(--hata-cizgi); background: var(--hata-zemin); color: var(--hata-yazi); padding: 12px 14px;
   border-radius: 6px; font: 500 12px/1.6 var(--poppins); margin: 14px 0 0; }
@@ -75,7 +74,6 @@ h2 { font: 600 15px/1.3 var(--poppins); margin: 0 0 4px; }
 .dugme.birincil:active { background: var(--kor-basili); border-color: var(--kor-basili); }
 .dugme:disabled { opacity: .45; }
 .dugme.genis { width: 100%; }
-.dugme.kucuk { min-height: 40px; padding: 0 14px; font-size: 12px; }
 .metin-dugme { background: none; border: 0; padding: 12px 0; min-height: 44px; color: var(--soluk); font: 600 12px/1 var(--poppins); }
 .metin-dugme.kor { color: var(--kor); }
 .metin-dugme:active { color: var(--yazi); }

@@ -1,10 +1,11 @@
 // Halka: kayıt denetimi yüzüğün kendisi. Dinlerken çemberin üstüne mikrofonun gerçek ses düzeyi
 // (yerel kaydedicinin 250 ms'lik okuması) ışınsal çizgiler olarak işlenir: en yeni okuma tepede,
-// eskiler saat yönünde geriye kayar ve söner. Süs değil, veri: sessizlikte çember dümdüz kalır.
+// eskiler saat yönünün tersine kayar ve söner. Süs değil, veri: sessizlikte her okuma kısa bir çentik bırakır.
 import { useEffect, useRef } from "react";
 
-const KOR = "#d97757";
-const CIZGI = "#33333b";
+// Renkler stil.css'teki belirteçlerden okunur; tek kaynak orası.
+const belirtec = (ad: string, yedek: string) =>
+  (typeof getComputedStyle !== "undefined" && getComputedStyle(document.documentElement).getPropertyValue(ad).trim()) || yedek;
 const OKUMA = 120; // 30 sn geçmiş (250 ms'de bir)
 
 export function Halka(p: {
@@ -38,6 +39,8 @@ export function Halka(p: {
     const boyut = t.getBoundingClientRect().width;
     t.width = t.height = Math.round(boyut * oran);
     const c = t.getContext("2d")!;
+    const KOR = belirtec("--kor", "#d97757");
+    const CIZGI = belirtec("--cizgi-2", "#33333b");
     c.setTransform(oran, 0, 0, oran, 0, 0);
     const m = boyut / 2;
     const r = m * (p.kucuk ? 0.8 : 0.78);

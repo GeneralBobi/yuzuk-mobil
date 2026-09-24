@@ -396,7 +396,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
                 <div className="cihaz" key={c.id}>
                   <span><b>{c.ad ?? "Cihaz"}</b>{c.bu ? " · bu telefon" : ""}</span>
                   {c.bu ? <span className="mono">{c.son_gorulme ? saat(c.son_gorulme) : ""}</span>
-                    : <button className="metin-dugme" style={{ padding: 0, minHeight: 0 }} onClick={() => void hat.cihazIptal(c.id)}>Kaldır</button>}
+                    : <button className="metin-dugme" style={{ padding: "0 0 0 16px" }} onClick={() => void hat.cihazIptal(c.id)}>Kaldır</button>}
                 </div>
               ))}
             </div>

@@ -458,7 +458,7 @@ class Hat {
 
   // ---------------- Obsidian ----------------
 
-  private async obsidianaYaz(o: Oturum, s: { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: string; metin: string }[];
+  private async obsidianaYaz(o: Oturum, s: { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: string; saat?: string; metin: string }[];
     konusmaci?: { sayi?: number; sen?: boolean; sureler?: Record<string, number> }; yazici?: string; istenen_yazici?: string }) {
     const k = s.konusmaci;
     if (k?.sayi) {
@@ -479,7 +479,7 @@ class Hat {
     const hat = s.hatirlaticilar ?? [];
     let not = `---\nkaynak: yüzük\ntarih: ${tarih} ${saat}\ntags: [yüzük]\n---\n\n# ${baslik}\n\n`;
     not += s.not_md?.trim() ? s.not_md.trim() + "\n" : "_Bu oturumda not alınacak bir şey bulunmadı._\n";
-    if (hat.length) not += `\n## Hatırlatıcılar\n${hat.map((h) => `- [ ] ${h.metin} 📅 ${h.tarih}`).join("\n")}\n`;
+    if (hat.length) not += `\n## Hatırlatıcılar\n${hat.map((h) => `- [ ] ${h.metin}${h.saat ? ` · saat ${h.saat}` : ""} 📅 ${h.tarih}`).join("\n")}\n`;
     const alt = this.ayarlar.altKlasor || "Yüzük";
     const yazilan = await yerel.dosyaYaz({ agac: this.ayarlar.vault!, yol: `${alt}/${ad}`, icerik: not, ekle: false });
     o.notAdi = yazilan.ad;
@@ -492,16 +492,19 @@ class Hat {
       ? ilk.replace(/^[-*]\s*/, "").replace(/\*\*/g, "").split(/(?<=[.!?])\s/)[0].slice(0, 180)
       : satirlar.filter((l) => l.startsWith("### ")).map((l) => l.slice(4)).slice(0, 3).join(" · ");
     if (hat.length) {
-      const satirlar = hat.map((h) => `- [ ] ${h.metin} 📅 ${h.tarih} · [[${ad.replace(/\.md$/, "")}]]\n`).join("");
+      const satirlar = hat.map((h) => `- [ ] ${h.metin}${h.saat ? ` · saat ${h.saat}` : ""} 📅 ${h.tarih} · [[${ad.replace(/\.md$/, "")}]]\n`).join("");
       await yerel.dosyaYaz({ agac: this.ayarlar.vault!, yol: `${alt}/Yüzük Hatırlatıcıları.md`, icerik: satirlar, ekle: true });
     }
-    // Tarihli işler telefonda hatırlatıcı olur: o gün sabah 09:00 (saat notta yazıyorsa o gün yine sabah uyarır).
+    // Tarihli işler telefonda hatırlatıcı olur: saat söylendiyse 30 dk önce, söylenmediyse o gün sabah 09:00.
     let kurulan = 0;
     for (const [k, h] of hat.entries()) {
       const [y, a, g] = h.tarih.split("-").map(Number);
       if (!y || !a || !g) continue;
-      const zaman = new Date(y, a - 1, g, 9, 0, 0).getTime();
-      const r = await yerel.hatirlaticiKur({ id: `${o.id}-${k}`, zamanMs: zaman, baslik: h.metin, metin: `${baslik} · ${h.tarih}` }).catch(() => null);
+      const [ss, dd] = (h.saat ?? "").split(":").map(Number);
+      const saatli = Number.isInteger(ss) && ss >= 0 && ss < 24;
+      const zaman = saatli ? new Date(y, a - 1, g, ss, dd || 0, 0).getTime() - 30 * 60e3 : new Date(y, a - 1, g, 9, 0, 0).getTime();
+      const r = await yerel.hatirlaticiKur({ id: `${o.id}-${k}`, zamanMs: zaman, baslik: h.metin,
+        metin: `${baslik} · ${h.tarih}${saatli ? ` ${h.saat}` : ""}` }).catch(() => null);
       if (r?.kuruldu) kurulan++;
     }
     o.hatirlatici = kurulan;

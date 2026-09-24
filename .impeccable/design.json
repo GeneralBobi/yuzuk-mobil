@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-24T00:00:00Z",
+  "title": "Design System: Yüzük",
+  "inherits": "C:\\Users\\Boran Birtanır\\Desktop\\Claudian_app\\desktop\\DESIGN.md",
+  "extensions": {
+    "colorMeta": {
+      "kor": { "role": "primary", "displayName": "Ember", "canonical": "oklch(67.2% 0.131 38.8)", "tonalRamp": ["oklch(15% 0.131 38.8)", "oklch(25% 0.131 38.8)", "oklch(35% 0.131 38.8)", "oklch(45% 0.131 38.8)", "oklch(55% 0.131 38.8)", "oklch(65% 0.131 38.8)", "oklch(80% 0.131 38.8)", "oklch(95% 0.131 38.8)"] },
+      "kor-basili": { "role": "primary", "displayName": "Pressed Ember", "canonical": "oklch(61.3% 0.131 42.4)", "tonalRamp": ["oklch(15% 0.131 42.4)", "oklch(25% 0.131 42.4)", "oklch(35% 0.131 42.4)", "oklch(45% 0.131 42.4)", "oklch(55% 0.131 42.4)", "oklch(65% 0.131 42.4)", "oklch(80% 0.131 42.4)", "oklch(95% 0.131 42.4)"] },
+      "kor-yazi": { "role": "primary", "displayName": "Ink on Ember", "canonical": "oklch(16.5% 0.004 285.9)", "tonalRamp": ["oklch(15% 0.004 285.9)", "oklch(25% 0.004 285.9)", "oklch(35% 0.004 285.9)", "oklch(45% 0.004 285.9)", "oklch(55% 0.004 285.9)", "oklch(65% 0.004 285.9)", "oklch(80% 0.004 285.9)", "oklch(95% 0.004 285.9)"] },
+      "zemin": { "role": "neutral", "displayName": "Night Ground", "canonical": "oklch(16.5% 0.004 285.9)", "tonalRamp": ["oklch(15% 0.004 285.9)", "oklch(25% 0.004 285.9)", "oklch(35% 0.004 285.9)", "oklch(45% 0.004 285.9)", "oklch(55% 0.004 285.9)", "oklch(65% 0.004 285.9)", "oklch(80% 0.004 285.9)", "oklch(95% 0.004 285.9)"] },
+      "yuzey": { "role": "neutral", "displayName": "Desk Surface", "canonical": "oklch(20.2% 0.008 285.7)", "tonalRamp": ["oklch(15% 0.008 285.7)", "oklch(25% 0.008 285.7)", "oklch(35% 0.008 285.7)", "oklch(45% 0.008 285.7)", "oklch(55% 0.008 285.7)", "oklch(65% 0.008 285.7)", "oklch(80% 0.008 285.7)", "oklch(95% 0.008 285.7)"] },
+      "yuzey-2": { "role": "neutral", "displayName": "Raised Surface", "canonical": "oklch(22.9% 0.010 285.6)", "tonalRamp": ["oklch(15% 0.010 285.6)", "oklch(25% 0.010 285.6)", "oklch(35% 0.010 285.6)", "oklch(45% 0.010 285.6)", "oklch(55% 0.010 285.6)", "oklch(65% 0.010 285.6)", "oklch(80% 0.010 285.6)", "oklch(95% 0.010 285.6)"] },
+      "cizgi": { "role": "neutral", "displayName": "Hairline", "canonical": "oklch(27.1% 0.011 285.6)", "tonalRamp": ["oklch(15% 0.011 285.6)", "oklch(25% 0.011 285.6)", "oklch(35% 0.011 285.6)", "oklch(45% 0.011 285.6)", "oklch(55% 0.011 285.6)", "oklch(65% 0.011 285.6)", "oklch(80% 0.011 285.6)", "oklch(95% 0.011 285.6)"] },
+      "cizgi-2": { "role": "neutral", "displayName": "Strong Hairline", "canonical": "oklch(32.4% 0.014 285.6)", "tonalRamp": ["oklch(15% 0.014 285.6)", "oklch(25% 0.014 285.6)", "oklch(35% 0.014 285.6)", "oklch(45% 0.014 285.6)", "oklch(55% 0.014 285.6)", "oklch(65% 0.014 285.6)", "oklch(80% 0.014 285.6)", "oklch(95% 0.014 285.6)"] },
+      "yazi": { "role": "neutral", "displayName": "Paper Text", "canonical": "oklch(95.5% 0.007 88.6)", "tonalRamp": ["oklch(15% 0.007 88.6)", "oklch(25% 0.007 88.6)", "oklch(35% 0.007 88.6)", "oklch(45% 0.007 88.6)", "oklch(55% 0.007 88.6)", "oklch(65% 0.007 88.6)", "oklch(80% 0.007 88.6)", "oklch(95% 0.007 88.6)"] },
+      "soluk": { "role": "neutral", "displayName": "Muted Text", "canonical": "oklch(63.4% 0.011 87.5)", "tonalRamp": ["oklch(15% 0.011 87.5)", "oklch(25% 0.011 87.5)", "oklch(35% 0.011 87.5)", "oklch(45% 0.011 87.5)", "oklch(55% 0.011 87.5)", "oklch(65% 0.011 87.5)", "oklch(80% 0.011 87.5)", "oklch(95% 0.011 87.5)"] },
+      "hata-zemin": { "role": "error", "displayName": "Error Ground", "canonical": "oklch(23.1% 0.018 30.3)", "tonalRamp": ["oklch(15% 0.018 30.3)", "oklch(25% 0.018 30.3)", "oklch(35% 0.018 30.3)", "oklch(45% 0.018 30.3)", "oklch(55% 0.018 30.3)", "oklch(65% 0.018 30.3)", "oklch(80% 0.018 30.3)", "oklch(95% 0.018 30.3)"] },
+      "hata-cizgi": { "role": "error", "displayName": "Error Rule", "canonical": "oklch(42.0% 0.057 39.6)", "tonalRamp": ["oklch(15% 0.057 39.6)", "oklch(25% 0.057 39.6)", "oklch(35% 0.057 39.6)", "oklch(45% 0.057 39.6)", "oklch(55% 0.057 39.6)", "oklch(65% 0.057 39.6)", "oklch(80% 0.057 39.6)", "oklch(95% 0.057 39.6)"] },
+      "hata-yazi": { "role": "error", "displayName": "Error Text", "canonical": "oklch(82.4% 0.068 39.2)", "tonalRamp": ["oklch(15% 0.068 39.2)", "oklch(25% 0.068 39.2)", "oklch(35% 0.068 39.2)", "oklch(45% 0.068 39.2)", "oklch(55% 0.068 39.2)", "oklch(65% 0.068 39.2)", "oklch(80% 0.068 39.2)", "oklch(95% 0.068 39.2)"] }
+    },
+    "typographyMeta": {
+      "wordmark": { "displayName": "Wordmark", "purpose": "claudian.app with the ember period, in the header only; 34px in the empty state." },
+      "headline": { "displayName": "Headline", "purpose": "One screen title per view." },
+      "title": { "displayName": "Title", "purpose": "Settings row names and session titles." },
+      "body": { "displayName": "Body (Lora)", "purpose": "Explanatory sentences in Muted Text, max 62ch." },
+      "reading": { "displayName": "Reading (Lora)", "purpose": "The voice-enrolment passage read aloud." },
+      "control": { "displayName": "Control", "purpose": "Button labels." },
+      "meta": { "displayName": "Meta", "purpose": "Session meta lines, status words, settings tags." },
+      "label": { "displayName": "Data Label (Mono, uppercase)", "purpose": "Data captions only: product name beside wordmark, day groups, ring state. Never a kicker above a headline." },
+      "counter": { "displayName": "Counter (Mono)", "purpose": "Recording timer at the ring centre; 18px in the small ring." },
+      "data": { "displayName": "Data (Mono)", "purpose": "Times, durations, hosts, paths, codes, counts." }
+    },
+    "shadows": [
+      { "name": "current-stop-halo", "value": "0 0 0 3px color-mix(in srgb, #d97757 22%, transparent)", "purpose": "State ring around the in-progress pipeline stop. Not elevation." }
+    ],
+    "focus": [
+      { "name": "focus-ember", "value": "outline: 2px solid #d97757; outline-offset: 3px; border-radius: 6px", "purpose": "Global visible focus, inherited from the desktop." }
+    ],
+    "motion": [
+      { "name": "state-transition", "value": "180ms cubic-bezier(0.16, 1, 0.3, 1); opacity 0→1, y 6px→0", "purpose": "Screen swaps via the motion library (AnimatePresence mode=wait)." },
+      { "name": "row-presence", "value": "180ms opacity with layout", "purpose": "Session rows entering and leaving the list." },
+      { "name": "reduced-motion", "value": "MotionConfig reducedMotion=\"user\"; ring ticks become one static level arc", "purpose": "Honour the system setting." },
+      { "name": "ring-cadence", "value": "one reading per 250ms, 120-reading history (30s)", "purpose": "The ring trace is a data plot, redrawn per reading." },
+      { "name": "haptic-record", "value": "Haptics.impact Medium on start, Light on stop", "purpose": "Confirm the tap for a pocketed phone." }
+    ],
+    "insets": [
+      { "name": "top", "value": "var(--safe-area-inset-top, env(safe-area-inset-top, 0px))", "purpose": "Added to the header top padding (+14px)." },
+      { "name": "bottom", "value": "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))", "purpose": "Added to the tab bar height and content bottom padding." }
+    ],
+    "breakpoints": [
+      { "name": "content-max", "value": "560px" },
+      { "name": "ring", "value": "min(68vw, 300px)" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one next action per view.",
+      "html": "<button class=\"ds-btn-primary\">Eşleştir</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 18px; border-radius: 6px; border: 1px solid #d97757; background: #d97757; color: #0e0e10; font: 600 13px/1 Poppins, Arial, sans-serif; cursor: pointer; } .ds-btn-primary:active { background: #c4663f; border-color: #c4663f; } .ds-btn-primary:focus-visible { outline: 2px solid #d97757; outline-offset: 3px; } .ds-btn-primary:disabled { opacity: .45; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Default button; raised surface with a strong hairline.",
+      "html": "<button class=\"ds-btn\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z\"/><path d=\"M14 2v4a2 2 0 0 0 2 2h4\"/></svg>Dosyadan not çıkar</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 18px; border-radius: 6px; border: 1px solid #33333b; background: #1c1c21; color: #f2f0eb; font: 600 13px/1 Poppins, Arial, sans-serif; cursor: pointer; } .ds-btn:active { border-color: #d97757; } .ds-btn:focus-visible { outline: 2px solid #d97757; outline-offset: 3px; }"
+    },
+    {
+      "name": "Text Action",
+      "kind": "button",
+      "refersTo": "text-action-ember",
+      "description": "Row-level actions; ember only for the recovering action.",
+      "html": "<button class=\"ds-text ds-text-kor\">Tekrar dene</button> <button class=\"ds-text\">Listeden kaldır</button>",
+      "css": ".ds-text { background: none; border: 0; padding: 12px 0; min-height: 44px; margin-right: 22px; color: #8d8a83; font: 600 12px/1 Poppins, Arial, sans-serif; cursor: pointer; } .ds-text-kor { color: #d97757; } .ds-text:active { color: #f2f0eb; } .ds-text:focus-visible { outline: 2px solid #d97757; outline-offset: 3px; border-radius: 6px; }"
+    },
+    {
+      "name": "Choice Tiles",
+      "kind": "chip",
+      "refersTo": "choice",
+      "description": "Three-up radiogroup; selected tile gets an ember border.",
+      "html": "<div class=\"ds-secim\" role=\"radiogroup\"><button class=\"ds-secenek\" role=\"radio\" aria-checked=\"true\">Claude</button><button class=\"ds-secenek\" role=\"radio\" aria-checked=\"false\">ChatGPT</button><button class=\"ds-secenek\" role=\"radio\" aria-checked=\"false\">Gemini</button></div>",
+      "css": ".ds-secim { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .ds-secenek { min-height: 48px; border-radius: 6px; border: 1px solid #33333b; background: #16161a; color: #f2f0eb; font: 600 12px/1.2 Poppins, Arial, sans-serif; cursor: pointer; } .ds-secenek[aria-checked=\"true\"] { border-color: #d97757; background: #1c1c21; } .ds-secenek:focus-visible { outline: 2px solid #d97757; outline-offset: 3px; }"
+    },
+    {
+      "name": "Pairing Code Input",
+      "kind": "input",
+      "refersTo": "input-code",
+      "description": "Mono, tracked code field with ember caret.",
+      "html": "<input class=\"ds-girdi\" placeholder=\"ABCD2345\" />",
+      "css": ".ds-girdi { min-height: 48px; padding: 0 12px; border-radius: 6px; border: 1px solid #33333b; background: #16161a; color: #f2f0eb; caret-color: #d97757; font: 500 15px/1 'JetBrains Mono', ui-monospace, monospace; letter-spacing: .12em; } .ds-girdi::placeholder { color: color-mix(in srgb, #8d8a83 70%, transparent); } .ds-girdi:focus-visible { outline: 2px solid #d97757; outline-offset: 3px; }"
+    },
+    {
+      "name": "Bottom Navigation",
+      "kind": "nav",
+      "refersTo": "nav-bar",
+      "description": "Three destinations; active icon in a raised pill with ember stroke; ember badge for pending notes.",
+      "html": "<nav class=\"ds-altbar\"><button class=\"ds-sekme ds-aktif\"><span class=\"ds-ikon\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z\"/><path d=\"M19 10v2a7 7 0 0 1-14 0v-2\"/><path d=\"M12 19v3\"/></svg></span>Dinle</button><button class=\"ds-sekme\"><span class=\"ds-ikon\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4\"/><path d=\"M2 6h4M2 10h4M2 14h4M2 18h4\"/><path d=\"M18.4 2.6a2 2 0 1 1 3 3L16 11l-4 1 1-4Z\"/></svg><span class=\"ds-rozet\">2</span></span>Notlar</button><button class=\"ds-sekme\"><span class=\"ds-ikon\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><circle cx=\"12\" cy=\"12\" r=\"8\"/></svg></span>Ayarlar</button></nav>",
+      "css": ".ds-altbar { display: grid; grid-template-columns: repeat(3, 1fr); height: 68px; padding: 6px 8px 0; background: #0e0e10; border-top: 1px solid #26262c; } .ds-sekme { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: none; border: 0; color: #8d8a83; font: 600 11px/1 Poppins, Arial, sans-serif; cursor: pointer; } .ds-ikon { position: relative; display: grid; place-items: center; width: 56px; height: 30px; border-radius: 15px; } .ds-aktif { color: #f2f0eb; } .ds-aktif .ds-ikon { background: #1c1c21; color: #d97757; } .ds-rozet { position: absolute; top: -2px; right: 8px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #d97757; color: #0e0e10; font: 600 11px/16px 'JetBrains Mono', monospace; text-align: center; } .ds-sekme:focus-visible { outline: 2px solid #d97757; outline-offset: 3px; border-radius: 6px; }"
+    },
+    {
+      "name": "Session Row with Pipeline Track",
+      "kind": "custom",
+      "refersTo": "session-row",
+      "description": "Hairline row: mono time, status word, title, meta, four-stop track (passed / current / pending).",
+      "html": "<div class=\"ds-oturum\"><div class=\"ds-ust\"><span class=\"ds-mono\">01:20 · 1 dk</span><span>yazılıyor</span></div><p class=\"ds-baslik\">Toplantı notu</p><p class=\"ds-meta\">2 kişi · notu Claude yazıyor</p><div class=\"ds-yol\"><span class=\"ds-durak ds-gecti\"><i></i>telefonda</span><span class=\"ds-durak ds-gecti\"><i></i>bulutta</span><span class=\"ds-durak ds-simdi\"><i></i>yazılıyor</span><span class=\"ds-durak\"><i></i>Obsidian'da</span></div></div>",
+      "css": ".ds-oturum { padding: 16px 0; border-bottom: 1px solid #26262c; border-top: 1px solid #26262c; color: #f2f0eb; } .ds-ust { display: flex; justify-content: space-between; font: 500 11px/1.4 Poppins, Arial, sans-serif; color: #f2f0eb; } .ds-mono { font-family: 'JetBrains Mono', monospace; color: #8d8a83; } .ds-baslik { font: 600 15px/1.35 Poppins, Arial, sans-serif; margin: 6px 0 0; } .ds-meta { font: 500 12px/1.6 Poppins, Arial, sans-serif; color: #8d8a83; margin: 4px 0 0; } .ds-yol { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 14px; } .ds-durak { position: relative; display: flex; flex-direction: column; gap: 7px; font: 500 11px/1 Poppins, Arial, sans-serif; color: #8d8a83; } .ds-durak::before { content: ''; position: absolute; top: 4px; left: 10px; right: 0; height: 1px; background: #33333b; } .ds-durak:last-child::before { display: none; } .ds-durak i { position: relative; width: 9px; height: 9px; border-radius: 50%; border: 1px solid #33333b; background: #0e0e10; } .ds-gecti i { background: #d97757; border-color: #d97757; } .ds-gecti::before { background: #d97757; } .ds-simdi { color: #f2f0eb; } .ds-simdi i { border-color: #d97757; box-shadow: 0 0 0 3px color-mix(in srgb, #d97757 22%, transparent); }"
+    },
+    {
+      "name": "Ring Instrument (static)",
+      "kind": "custom",
+      "refersTo": "ring",
+      "description": "Record control. Static snapshot of the recording state; the shipped ring draws level ticks on canvas from real microphone readings.",
+      "html": "<button class=\"ds-halka\" aria-pressed=\"true\"><svg viewBox=\"0 0 200 200\" class=\"ds-halka-svg\"><circle cx=\"100\" cy=\"100\" r=\"78\" fill=\"none\" stroke=\"#d97757\" stroke-width=\"2\"/><circle cx=\"100\" cy=\"100\" r=\"84\" fill=\"none\" stroke=\"#d97757\" stroke-width=\"3\" stroke-dasharray=\"96 432\" transform=\"rotate(-90 100 100)\"/></svg><span class=\"ds-halka-ic\"><span class=\"ds-sayac\">00:12</span><span class=\"ds-kucuk\">dinliyor</span></span></button>",
+      "css": ".ds-halka { position: relative; width: 220px; aspect-ratio: 1; border-radius: 50%; border: 0; padding: 0; background: none; display: grid; place-items: center; cursor: pointer; } .ds-halka-svg { position: absolute; inset: 0; width: 100%; height: 100%; } .ds-halka-ic { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; } .ds-sayac { font: 500 34px/1 'JetBrains Mono', monospace; letter-spacing: -0.02em; color: #f2f0eb; font-variant-numeric: tabular-nums; } .ds-kucuk { font: 400 11px/1 'JetBrains Mono', monospace; letter-spacing: 1.5px; text-transform: uppercase; color: #d97757; } .ds-halka:focus-visible { outline: 2px solid #d97757; outline-offset: 3px; }"
+    },
+    {
+      "name": "Error Note",
+      "kind": "card",
+      "refersTo": "error-note",
+      "description": "Alert in the dimmed-ember error family.",
+      "html": "<p class=\"ds-hata\" role=\"alert\">Mikrofon izni verilmedi. Ayarlar'dan izin ver.</p>",
+      "css": ".ds-hata { border: 1px solid #684235; background: #251a18; color: #edb7a5; padding: 12px 14px; border-radius: 6px; font: 500 12px/1.6 Poppins, Arial, sans-serif; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Ring on the Night Desk",
+    "overview": "Yüzük inherits the Claudian desktop world. `C:\\Users\\Boran Birtanır\\Desktop\\Claudian_app\\desktop\\DESIGN.md` is the parent authority for palette, the three families, the `claudian.app` wordmark with its ember period, orange focus, and the rules against invented emblems, decorative gradients and hand-authored animation. This file does not restate or override those rules. It records only what the phone adds or adapts: the ring instrument, the four-stop pipeline track, the bottom navigation bar, touch sizes, edge-to-edge insets, haptics, and the use of a motion library. If the two files ever conflict on a shared rule, the desktop file wins, and this one gets updated to match.\n\nOn the phone the world is a near-black desk ruled with hairlines. There are no cards. The one piece of theatre is the ring, which is the record control. At rest it is a dim circle. While recording, its circumference turns ember and grows radial ticks drawn from the real microphone level. Older ticks step back counter-clockwise and fade, and the ring stays flat during silence. Everything else is quiet: Lora sentences say what is happening, Poppins names things, and JetBrains Mono carries time, counts, codes and paths.\n\nDensity is low and made for one hand. The page is a single column capped at 560px, with a 20px edge and a fixed three-tab bar at the bottom. Controls are 48px tall.",
+    "keyCharacteristics": [
+      "Inherited palette, families and wordmark. The phone adds no new brand colour. The error tones are a dimmed ember, not a new red.",
+      "The ring is the record button, and its ember marks are data, not ornament.",
+      "Hairline rows (#26262c) instead of cards. A raised surface appears only where something can be acted on or read aloud.",
+      "Ember is reserved for live recording, the primary action, the active tab and \"done\" state.",
+      "Edge to edge: status and navigation bars sit on the ground colour, and content respects the safe-area insets."
+    ],
+    "rules": [
+      { "name": "The One Ember Rule", "body": "Ember marks only what is live, what is the next action, or what has arrived. Muted text never turns ember for emphasis, and emphasis inside a Lora sentence uses Paper Text instead.", "section": "colors" },
+      { "name": "The Ground-to-Glass Rule", "body": "The system bars, window, splash and icon background are all Night Ground. The app never shows a second dark colour behind the OS chrome.", "section": "colors" },
+      { "name": "The Three Voices Rule", "body": "A sentence is Lora, a name or verb is Poppins, and a number, time, path or code is Mono. Don't set a full sentence in Mono or a timestamp in Lora.", "section": "typography" },
+      { "name": "The 11px Floor Rule", "body": "Functional text never goes below 11px. This is inherited from the desktop and holds for badges and tab labels.", "section": "typography" },
+      { "name": "The Hairline-Not-Card Rule", "body": "Lists and settings are rows separated by 1px Hairline. A filled surface appears only for something you type into, choose, tap to fix, or read aloud.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do treat the Claudian desktop DESIGN.md as the parent. Take palette, families, wordmark and focus from it, and record only phone additions here.",
+      "Do make the ring the record control, and keep its marks tied to the real microphone level (flat during silence).",
+      "Do give every tappable element at least 48px (text actions 44px) and keep functional text at 11px or larger.",
+      "Do paint the status bar, navigation bar, window, splash and launcher background in Night Ground, and pad only the header and tab bar with safe-area insets.",
+      "Do show pipeline progress with the four-stop track on every session, and show failure in the error family on the stop where it happened.",
+      "Do confirm start and stop of recording with a haptic impact.",
+      "Do keep transitions at 150–250 ms ease-out through the motion library, and honour reduced motion."
+    ],
+    "donts": [
+      "Don't add a red record circle, a second accent, or a separate error red. Failure uses the dimmed-ember error family.",
+      "Don't wrap rows in cards or add drop shadows. Use hairlines and tonal steps.",
+      "Don't use the mono uppercase Label as a kicker or eyebrow above a headline. It captions data only (product name, day, ring state).",
+      "Don't invent an emblem for the app icon. The launcher icon is the `claudian.app` wordmark on Night Ground.",
+      "Don't hand-author CSS keyframes or page-load animation.",
+      "Don't fake level ticks or progress. If there is no reading, the ring stays still."
+    ]
+  }
+}
