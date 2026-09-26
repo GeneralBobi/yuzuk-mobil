@@ -14,6 +14,7 @@ import android.provider.OpenableColumns;
 import androidx.activity.result.ActivityResult;
 import androidx.documentfile.provider.DocumentFile;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
@@ -67,6 +68,21 @@ public class YuzukEklentisi extends Plugin {
     private void izinSonucu(PluginCall call) {
         // Mikrofon şart; bildirim reddedilse de kayıt çalışır.
         call.resolve(sonuc("mikrofon", getPermissionState("mikrofon") == PermissionState.GRANTED));
+    }
+
+    /** Yalnız bildirim izni (Android 13+): bilgisayardan hatırlatıcı gelen ama hiç kayıt almamış telefon için. */
+    @PluginMethod
+    public void bildirimIzni(PluginCall call) {
+        if (Build.VERSION.SDK_INT < 33 || getPermissionState("bildirim") == PermissionState.GRANTED) {
+            call.resolve(sonuc("verildi", true));
+            return;
+        }
+        requestPermissionForAlias("bildirim", call, "bildirimSonucu");
+    }
+
+    @PermissionCallback
+    private void bildirimSonucu(PluginCall call) {
+        call.resolve(sonuc("verildi", getPermissionState("bildirim") == PermissionState.GRANTED));
     }
 
     // ------------------------------------------------ kayıt
@@ -158,7 +174,7 @@ public class YuzukEklentisi extends Plugin {
 
     // ------------------------------------------------ başka uygulamadan paylaşım
 
-    /** WhatsApp sesli mesajı, ses kaydedici, video: "Paylaş → Yüzük" ile gelen dosya not olur. */
+    /** WhatsApp sesli mesajı, ses kaydedici, video: "Paylaş → Claudian" ile gelen dosya not olur. */
     private JSObject bekleyenPaylasim = null;
 
     @Override
@@ -417,7 +433,7 @@ public class YuzukEklentisi extends Plugin {
         }
         String metin = call.getString("metin", "");
         Notification n = new Notification.Builder(getContext(), "not")
-                .setContentTitle(call.getString("baslik", "Yüzük"))
+                .setContentTitle(call.getString("baslik", "Claudian"))
                 .setContentText(metin)
                 .setStyle(new Notification.BigTextStyle().bigText(metin))
                 .setSmallIcon(android.R.drawable.ic_menu_edit)
@@ -435,8 +451,18 @@ public class YuzukEklentisi extends Plugin {
         try {
             long zaman = call.getLong("zamanMs", 0L);
             if (zaman <= System.currentTimeMillis()) { call.resolve(sonuc("kuruldu", false)); return; }
-            HatirlaticiAlici.kur(getContext(), call.getString("id"), zaman, call.getString("baslik", "Yüzük"), call.getString("metin", ""));
+            HatirlaticiAlici.kur(getContext(), call.getString("id"), zaman, call.getString("baslik", "Claudian"), call.getString("metin", ""));
             call.resolve(sonuc("kuruldu", true));
+        } catch (Exception e) {
+            call.reject(e.getMessage() != null ? e.getMessage() : e.toString());
+        }
+    }
+
+    /** Bilgisayardaki vault'un açık hatırlatıcıları: tam liste gelir, telefondaki "pc-" kümesi ona eşitlenir. */
+    @PluginMethod
+    public void hatirlaticiEsitle(PluginCall call) {
+        try {
+            call.resolve(sonuc("kurulan", HatirlaticiAlici.esitle(getContext(), call.getArray("liste", new JSArray()))));
         } catch (Exception e) {
             call.reject(e.getMessage() != null ? e.getMessage() : e.toString());
         }

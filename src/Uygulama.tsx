@@ -58,8 +58,11 @@ export function Uygulama() {
     const on = CapApp.addListener("resume", () => {
       void hat.ilerlet();
       void hat.baglantiDene();
+      void hat.hatirlaticiCek();
     });
-    // "Paylaş → Yüzük": açılışta bekleyen paylaşım bir kez alınır, uygulama açıkken gelenler dinlenir.
+    // Bilgisayardaki hatırlatıcılar uygulama açıkken 15 dakikada bir yeniden okunur; kurulu alarmlar kapalıyken de çalar.
+    const yoklama = window.setInterval(() => void hat.hatirlaticiCek(), 15 * 60e3);
+    // "Paylaş → Claudian": açılışta bekleyen paylaşım bir kez alınır, uygulama açıkken gelenler dinlenir.
     const paylas = (p: Paylasim) => {
       hat.paylasimIsle(p);
       if (p.yol) setSekme("notlar");
@@ -70,6 +73,7 @@ export function Uygulama() {
       void dinleyici.then((d) => d.remove());
       void on.then((d) => d.remove());
       void paylasim.then((d) => d.remove());
+      window.clearInterval(yoklama);
     };
   }, []);
 
@@ -384,6 +388,28 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
               <button className="dugme" disabled={hat.esitleme.durum === "calisiyor"} onClick={() => void hat.esitle()}>
                 {hat.esitleme.durum === "calisiyor" ? "Eşitleniyor…" : "Şimdi eşitle"}
               </button>
+            </div>
+          </div>
+        )}
+
+        {eslesti && (
+          <div className="satir">
+            <div className="satir-bas">
+              <h2>Hatırlatıcılar</h2>
+              <span className={`etiket ${hat.hatirlaticilar.son ? "" : "soluk"}`}>
+                {hat.hatirlaticilar.son ? `${hat.hatirlaticilar.sayi} kurulu` : "bakılmadı"}
+              </span>
+            </div>
+            <p className="aciklama">
+              Bilgisayarındaki vault'ta tarihi olan açık işler bu telefonda bildirim olur: saati yazılıysa o saatte, değilse o gün
+              sabah 09:00'da. İş bilgisayarda yapıldı olarak işaretlenince bildirimi de kalkar.
+            </p>
+            {hat.hatirlaticilar.son && (
+              <p className="deger">son bakış: {gunAdi(hat.hatirlaticilar.son).toLocaleLowerCase("tr")} {saat(hat.hatirlaticilar.son)}</p>
+            )}
+            {hat.hatirlaticilar.metin && <p className="aciklama" style={{ marginTop: 6 }}>{hat.hatirlaticilar.metin}</p>}
+            <div className="satir-eylem">
+              <button className="metin-dugme kor" onClick={() => void hat.hatirlaticiCek()}>Şimdi bak</button>
             </div>
           </div>
         )}

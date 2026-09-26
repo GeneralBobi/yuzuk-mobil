@@ -14,7 +14,7 @@ import android.os.IBinder;
 
 /**
  * Ekran kilitliyken de süren kayıt. Android mikrofonu arka planda yalnız görünür bir ön plan
- * servisine verir; bildirimdeki "Yüzük dinliyor" satırı aynı zamanda çevreye karşı görünür göstergedir.
+ * servisine verir; bildirimdeki "Claudian dinliyor" satırı aynı zamanda çevreye karşı görünür göstergedir.
  * Ses uygulamanın kendi klasörüne yazılır; sunucuya gidip not olunca silinir.
  */
 public class KayitServisi extends Service {
@@ -52,7 +52,7 @@ public class KayitServisi extends Service {
         PendingIntent ac = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification bildirim = new Notification.Builder(this, KANAL)
-                .setContentTitle("Yüzük dinliyor")
+                .setContentTitle("Claudian dinliyor")
                 .setContentText("Not almak için kayıt sürüyor. Durdurmak için uygulamaya dön.")
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .setOngoing(true)

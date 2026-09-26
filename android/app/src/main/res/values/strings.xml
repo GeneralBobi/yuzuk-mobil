@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Yüzük</string>
-    <string name="title_activity_main">Yüzük</string>
+    <string name="app_name">Claudian</string>
+    <string name="title_activity_main">Claudian</string>
     <string name="package_name">app.claudian.yuzuk</string>
     <string name="custom_url_scheme">app.claudian.yuzuk</string>
 </resources>

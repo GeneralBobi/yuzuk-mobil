@@ -23,13 +23,15 @@ export interface YuzukEklentisi {
   bildir(o: { baslik: string; metin: string }): Promise<void>;
   hatirlaticiKur(o: { id: string; zamanMs: number; baslik: string; metin: string }): Promise<{ kuruldu: boolean }>;
   hatirlaticiSayisi(): Promise<{ sayi: number }>;
+  hatirlaticiEsitle(o: { liste: { id: string; zamanMs: number; bugun: boolean; baslik: string; metin: string }[] }): Promise<{ kurulan: number }>;
+  bildirimIzni(): Promise<{ verildi: boolean }>;
   paylasimAl(): Promise<Paylasim>;
   vaultListe(o: { agac: string }): Promise<{ dosyalar: { yol: string; boyut: number; mtime: number }[] }>;
   vaultOku(o: { agac: string; yol: string }): Promise<{ icerik: string }>;
   addListener(olay: "paylasim", dinleyici: (p: Paylasim) => void): Promise<{ remove: () => Promise<void> }>;
 }
 
-/** Başka uygulamadan "Paylaş → Yüzük" ile gelen dosya (uygulamanın klasörüne kopyalanmış). */
+/** Başka uygulamadan "Paylaş → Claudian" ile gelen dosya (uygulamanın klasörüne kopyalanmış). */
 export interface Paylasim {
   yol?: string;
   ad?: string | null;

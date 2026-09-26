@@ -137,7 +137,7 @@ class Hat {
     for (const o of this.oturumlar) if (o.durum === "gonderiliyor") o.durum = "yerel";
     this.sakla();
     void this.ilerlet();
-    void this.baglantiDene().then(() => Promise.all([this.sesIziYukle(), this.hesapYukle()]));
+    void this.baglantiDene().then(() => Promise.all([this.sesIziYukle(), this.hesapYukle(), this.hatirlaticiCek()]));
     void this.iskeletKur();
   }
 
@@ -271,7 +271,7 @@ class Hat {
       const j = await r.json();
       this.ayarla({ sunucu: j.sunucu, anahtar: j.anahtar });
       this.eslestirme = { durum: "tamam", metin: "Eşleşti" };
-      void this.baglantiDene();
+      void this.baglantiDene().then(() => this.hatirlaticiCek());
     } catch (e) {
       this.eslestirme = { durum: "hata", metin: `Eşleşmedi: ${(e as Error).message}` };
     }
@@ -297,6 +297,67 @@ class Hat {
     } catch {
       return sonuc("kapali", "Buluta ulaşılamadı. İnternet yok gibi; kayıtlar telefonda bekler.");
     }
+  }
+
+  // ---------------- bilgisayardaki hatırlatıcılar ----------------
+  //
+  // Bilgisayardaki vault'un açık, tarihli hatırlatıcıları (bugün ve sonrası) bulut üzerinden, yalnız hesabın kendi
+  // bilgisayarından gelir; her biri telefonda yerel bildirim olur: saat varsa o saatte, yoksa o gün 09:00'da.
+  // Gelen liste tamdır: listede artık olmayanın (yapıldı, silindi) bildirimi iptal edilir. Bilgisayar kapalıysa, bulut
+  // ya da internet yoksa kurulu olanlara dokunulmaz. Arka plan işi yok: açılışta, öne gelişte ve açıkken 15 dakikada bir.
+
+  hatirlaticilar: { sayi: number; son?: string; metin: string } = oku("pc-hatirlaticilar", { sayi: 0, metin: "" });
+  private cekiyor = false;
+
+  async hatirlaticiCek() {
+    if (!this.ayarlar.anahtar || this.cekiyor) return;
+    this.cekiyor = true;
+    const guncelle = (h: Partial<Hat["hatirlaticilar"]>) => {
+      this.hatirlaticilar = { ...this.hatirlaticilar, ...h };
+      localStorage.setItem("pc-hatirlaticilar", JSON.stringify(this.hatirlaticilar));
+      this.yayinla();
+    };
+    try {
+      const r = await fetch(`${this.ayarlar.sunucu}/v1/hatirlaticilar`, { headers: this.basliklar });
+      if (!r.ok) {
+        const neden = ((await r.json().catch(() => ({}))) as { detail?: string }).detail;
+        guncelle({ metin: r.status === 404 ? "Bilgisayardaki Claudian bu özelliği henüz tanımıyor; güncellenince hatırlatıcılar gelir."
+          : `${neden ?? `Bulut ${r.status}`} Kurulu hatırlatıcılar olduğu gibi duruyor.` });
+        return;
+      }
+      const j = (await r.json()) as { hatirlaticilar?: unknown };
+      if (!Array.isArray(j.hatirlaticilar)) throw new Error("Bilgisayardan beklenmeyen yanıt geldi.");
+      const b = new Date();
+      const iki = (n: number) => String(n).padStart(2, "0");
+      const bugun = `${b.getFullYear()}-${iki(b.getMonth() + 1)}-${iki(b.getDate())}`;
+      const liste = [];
+      for (const h of j.hatirlaticilar as { id?: unknown; tarih?: unknown; saat?: unknown; metin?: unknown; kaynak?: unknown }[]) {
+        // Biçimi tutmayan satır atlanır; listenin geri kalanı yine kurulur.
+        if (typeof h?.id !== "string" || !/^[0-9a-f]{16}$/.test(h.id) || typeof h.tarih !== "string" || typeof h.metin !== "string") continue;
+        const t = h.tarih.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        const s = typeof h.saat === "string" ? h.saat.match(/^([01]\d|2[0-3]):([0-5]\d)$/) : null;
+        const metin = h.metin.trim().slice(0, 200);
+        if (!t || !metin) continue;
+        const zamanMs = new Date(+t[1], +t[2] - 1, +t[3], s ? +s[1] : 9, s ? +s[2] : 0, 0).getTime();
+        const kaynak = typeof h.kaynak === "string" && h.kaynak.trim() ? h.kaynak.trim().replace(/\.md$/, "") : "Bilgisayardaki vault";
+        liste.push({ id: h.id, zamanMs, bugun: h.tarih === bugun, baslik: metin, metin: `${kaynak} · ${h.tarih}${s ? ` ${s[0]}` : ""}` });
+      }
+      if (liste.length) await this.bildirimIzniSor();
+      const { kurulan } = await yerel.hatirlaticiEsitle({ liste });
+      guncelle({ sayi: kurulan, son: new Date().toISOString(), metin: "" });
+    } catch (e) {
+      const m = (e as Error).message;
+      guncelle({ metin: `${m.includes("fetch") ? "Buluta ulaşılamadı." : m} Kurulu hatırlatıcılar olduğu gibi duruyor.` });
+    } finally {
+      this.cekiyor = false;
+    }
+  }
+
+  /** Android 13+: bildirim izni bir kez sorulur (kayıt alınırken zaten istenir; hiç kayıt almamış telefon için burada). */
+  private async bildirimIzniSor() {
+    if (localStorage.getItem("bildirim-izni-soruldu")) return;
+    localStorage.setItem("bildirim-izni-soruldu", "1");
+    await yerel.bildirimIzni().catch(() => undefined);
   }
 
   // ---------------- hesap ----------------
@@ -404,7 +465,7 @@ class Hat {
     if (this.sesKaydi !== "yok") return;
     const izin = await yerel.izinIste();
     if (!izin.mikrofon) {
-      this.uyari = "Mikrofon izni verilmedi. Android ayarlarından Yüzük'e mikrofon izni ver.";
+      this.uyari = "Mikrofon izni verilmedi. Android ayarlarından Claudian'a mikrofon izni ver.";
       this.yayinla();
       return;
     }
