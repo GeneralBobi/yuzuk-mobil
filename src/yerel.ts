@@ -9,7 +9,26 @@ export interface KayitDurumu {
   hata?: string | null;
 }
 
+export interface CanliDurum extends KayitDurumu {
+  isleniyor: boolean; // mikrofon kapandı, son parçalar metne dönüyor
+  gonderilen: number; // bilgisayarda metne dönen parça
+  yerelde: number; // telefonda metne dönen parça (bağlantı yokken)
+  bekleyen: number; // henüz metne dönmemiş parça (bellekte)
+  cumle: number;
+  durum: "bilgisayar" | "telefon" | "bekliyor" | null;
+  dokum: string | null;
+}
+
+export interface ModelDurumu { hazir: boolean; indiriliyor: boolean; indirilen: number; boyut: number; hata: string | null }
+
 export interface YuzukEklentisi {
+  canliBaslat(o: { sunucu: string; anahtar: string; dil?: string; testPcm?: string }): Promise<{ dokum: string }>;
+  canliDurdur(): Promise<{ dokum: string | null; sureSn: number }>;
+  canliDurumu(): Promise<CanliDurum>;
+  dokumOku(o: { yol: string }): Promise<{ dokum: string; bitti: boolean; cumle: number }>;
+  modelDurumu(): Promise<ModelDurumu>;
+  modelIndir(): Promise<void>;
+  modelSil(): Promise<void>;
   izinIste(): Promise<{ mikrofon: boolean }>;
   kayitBaslat(): Promise<{ yol: string }>;
   kayitDurdur(): Promise<{ yol: string | null; sureSn: number }>;

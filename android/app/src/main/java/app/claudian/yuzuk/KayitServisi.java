@@ -13,9 +13,8 @@ import android.os.Build;
 import android.os.IBinder;
 
 /**
- * Ekran kilitliyken de süren kayıt. Android mikrofonu arka planda yalnız görünür bir ön plan
- * servisine verir; bildirimdeki "Claudian dinliyor" satırı aynı zamanda çevreye karşı görünür göstergedir.
- * Ses uygulamanın kendi klasörüne yazılır; sunucuya gidip not olunca silinir.
+ * Yalnız "Sesini tanıt" için: kullanıcı kendi sesini ~25 sn okur, ses izi çıkarılınca dosya silinir.
+ * Not alma kaydı bu servisi kullanmaz (27.09.2026): CanliKayitServisi ses dosyası oluşturmadan çalışır.
  */
 public class KayitServisi extends Service {
     static final String KANAL = "kayit";

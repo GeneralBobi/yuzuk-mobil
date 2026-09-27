@@ -7,17 +7,23 @@ android {
         applicationId "app.claudian.yuzuk"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 6000
-        versionName "0.6.0"
+        versionCode 7000
+        versionName "0.7.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // Çevrimdışı yazıya dökme (whisper.cpp): telefonlar arm64, emülatör x86_64.
+        ndk { abiFilters "arm64-v8a", "x86_64" }
+        externalNativeBuild { cmake { arguments "-DANDROID_STL=c++_shared", "-DCMAKE_BUILD_TYPE=Release"; cppFlags "" } } // hata ayıklama derlemesinde de yerel kod optimize: yoksa whisper dakikalar sürer
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    // Google Play: `gradlew bundleRelease -Pplay` yükleme anahtarıyla (android/keystore.properties, git'e girmez) imzalar.
-    // Elden dağıtılan APK hata ayıklama anahtarında kalır: telefondaki kurulumun üstüne güncellenebilsin.
+    buildFeatures { buildConfig = true } // BuildConfig.DEBUG: test girişi yalnız hata ayıklama derlemesinde
+    ndkVersion = "28.2.13676358"
+    externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
+    // Yayın derlemesi (APK ve Play AAB) her zaman yükleme anahtarıyla imzalanır (android/keystore.properties, git'e girmez).
+    // Anahtar yoksa derleme durur: hata ayıklama anahtarıyla imzalı bir APK dağıtıma çıkmaz (güvenlik raporu 0.29.0).
     def anahtarDosyasi = rootProject.file("keystore.properties")
     signingConfigs {
         if (anahtarDosyasi.exists()) {
@@ -34,7 +40,8 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig = (project.hasProperty('play') && anahtarDosyasi.exists()) ? signingConfigs.yukleme : signingConfigs.debug
+            if (!anahtarDosyasi.exists()) throw new GradleException("android/keystore.properties yok: yayın derlemesi yükleme anahtarı olmadan imzalanmaz.")
+            signingConfig = signingConfigs.yukleme
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }

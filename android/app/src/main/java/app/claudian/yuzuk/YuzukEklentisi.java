@@ -127,6 +127,117 @@ public class YuzukEklentisi extends Plugin {
         call.resolve(r);
     }
 
+    // ------------------------------------------------ canlı kayıt: ses dosyası yok (27.09.2026)
+
+    @PluginMethod
+    public void canliBaslat(PluginCall call) {
+        if (CanliKayitServisi.calisiyor || CanliKayitServisi.isleniyor) {
+            call.reject("Önceki kayıt hâlâ metne çevriliyor; biraz bekle.");
+            return;
+        }
+        File dokum = new File(getContext().getFilesDir(), "dokum_" + System.currentTimeMillis() + ".jsonl");
+        Intent i = new Intent(getContext(), CanliKayitServisi.class)
+                .putExtra("sunucu", call.getString("sunucu"))
+                .putExtra("anahtar", call.getString("anahtar"))
+                .putExtra("dil", call.getString("dil"))
+                .putExtra("testPcm", BuildConfig.DEBUG ? call.getString("testPcm") : null)
+                .putExtra("dokum", dokum.getAbsolutePath());
+        getContext().startForegroundService(i);
+        long son = System.currentTimeMillis() + 2000;
+        while (!CanliKayitServisi.calisiyor && CanliKayitServisi.sonHata == null && System.currentTimeMillis() < son) {
+            try { Thread.sleep(50); } catch (InterruptedException ignored) { }
+        }
+        if (!CanliKayitServisi.calisiyor) {
+            call.reject(CanliKayitServisi.sonHata != null ? CanliKayitServisi.sonHata : "kayıt başlamadı");
+            return;
+        }
+        call.resolve(sonuc("dokum", dokum.getAbsolutePath()));
+    }
+
+    @PluginMethod
+    public void canliDurdur(PluginCall call) {
+        long bas = CanliKayitServisi.baslangicMs;
+        CanliKayitServisi.durdur(getContext());
+        JSObject r = new JSObject();
+        r.put("dokum", CanliKayitServisi.dokum);
+        r.put("sureSn", bas > 0 ? (System.currentTimeMillis() - bas) / 1000 : 0);
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void canliDurumu(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("calisiyor", CanliKayitServisi.calisiyor);
+        r.put("isleniyor", CanliKayitServisi.isleniyor);
+        r.put("baslangicMs", CanliKayitServisi.baslangicMs);
+        r.put("seviye", CanliKayitServisi.seviye);
+        r.put("hata", CanliKayitServisi.sonHata);
+        r.put("gonderilen", CanliKayitServisi.gonderilen);
+        r.put("yerelde", CanliKayitServisi.yerelde);
+        r.put("bekleyen", CanliKayitServisi.bekleyen);
+        r.put("cumle", CanliKayitServisi.cumle);
+        r.put("durum", CanliKayitServisi.sonDurum);
+        r.put("dokum", CanliKayitServisi.dokum);
+        call.resolve(r);
+    }
+
+    /** Döküm dosyası (JSON satırları) → sunucunun beklediği tek JSON: {dil, sure_sn, cumleler}. Yalnız metin. */
+    @PluginMethod
+    public void dokumOku(PluginCall call) {
+        String yol = call.getString("yol");
+        if (yol == null || !yol.startsWith(getContext().getFilesDir().getAbsolutePath())) {
+            call.reject("geçersiz yol");
+            return;
+        }
+        try (BufferedReader r = new BufferedReader(new InputStreamReader(new FileInputStream(yol), StandardCharsets.UTF_8))) {
+            org.json.JSONArray cumleler = new org.json.JSONArray();
+            Object dil = JSONObject.NULL;
+            double sure = 0;
+            boolean bitti = false;
+            String s;
+            while ((s = r.readLine()) != null) {
+                if (s.trim().isEmpty()) continue;
+                JSONObject j = new JSONObject(s);
+                String tur = j.optString("tur", "");
+                if (tur.equals("oturum")) continue;
+                if (tur.equals("son")) { bitti = true; sure = j.optDouble("sure_sn", 0); dil = j.opt("dil"); continue; }
+                cumleler.put(j);
+                sure = Math.max(sure, j.optDouble("son", 0));
+            }
+            JSONObject d = new JSONObject().put("dil", dil).put("sure_sn", sure).put("cumleler", cumleler);
+            JSObject o = new JSObject();
+            o.put("dokum", d.toString());
+            o.put("bitti", bitti);
+            o.put("cumle", cumleler.length());
+            call.resolve(o);
+        } catch (Exception e) {
+            call.reject(e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void modelDurumu(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("hazir", YerelWhisper.hazir(getContext()));
+        r.put("indiriliyor", YerelWhisper.indiriliyor);
+        r.put("indirilen", YerelWhisper.indirilen);
+        r.put("boyut", YerelWhisper.BOYUT);
+        r.put("hata", YerelWhisper.indirmeHatasi);
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void modelIndir(PluginCall call) {
+        YerelWhisper.indir(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void modelSil(PluginCall call) {
+        YerelWhisper.sil(getContext());
+        call.resolve();
+    }
+
     // ------------------------------------------------ dosya
 
     @PluginMethod

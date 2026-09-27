@@ -197,9 +197,10 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
       </div>
       <p className="aciklama halka-durum">
         {hat.kaydediyor
-          ? "Ekranı kilitleyebilirsin. Durdurmak için halkaya dokun; not Obsidian'a kendiliğinden düşer."
+          ? "Ekranı kilitleyebilirsin. Ses kaydedilmez; konuşma parça parça metne çevrilir. Durdurmak için halkaya dokun."
           : "Halkaya dokun ve telefonu bırak. Durdurduğunda konuşmanın notu Obsidian'a yazılır."}
       </p>
+      {hat.kaydediyor && hat.canli && <ParcaDurumu />}
 
       {hat.uyari && <p className="hata" role="alert">{hat.uyari}</p>}
 
@@ -209,6 +210,19 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
 
       {son && <div className="liste bolum"><OturumSatiri o={son} /></div>}
     </section>
+  );
+}
+
+/** Süren kaydın parçaları nerede metne döndü: bağlantı koparsa bunu görmek güven verir, not kaybolmuyor. */
+function ParcaDurumu() {
+  const c = hat.canli!;
+  const yer = c.durum === "telefon" ? "bağlantı yok · telefonda metne çevriliyor"
+    : c.durum === "bekliyor" ? "bağlantı yok · parçalar bellekte bekliyor"
+    : c.durum === "bilgisayar" ? "bilgisayarında metne çevriliyor" : "ilk parça bekleniyor";
+  return (
+    <p className="deger halka-durum" aria-live="polite">
+      {c.cumle} cümle · {yer}{c.yerelde ? ` · ${c.yerelde} parça telefonda` : ""}{c.bekleyen ? ` · ${c.bekleyen} sırada` : ""}
+    </p>
   );
 }
 
@@ -414,6 +428,8 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
           </div>
         )}
 
+        <CevrimdisiModel />
+
         <div className="satir">
           <div className="satir-bas">
             <h2>Sesin</h2>
@@ -487,6 +503,30 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
 
 const EN_AZ_SN = 15;
 const HEDEF_SN = 25;
+
+function CevrimdisiModel() {
+  const m = hat.model;
+  const mb = (b: number) => Math.round(b / 1e6);
+  return (
+    <div className="satir">
+      <div className="satir-bas">
+        <h2>Çevrimdışı yazıya dökme</h2>
+        <span className={`etiket ${m?.hazir ? "" : "soluk"}`}>{m?.hazir ? "kurulu" : m?.indiriliyor ? "iniyor" : "kurulu değil"}</span>
+      </div>
+      <p className="aciklama">
+        Bağlantı koparsa konuşma bu telefonda metne çevrilir ve not kaybolmaz; bağlantı gelince metin bilgisayarına gider.
+        Ses hiçbir durumda kaydedilmez.
+      </p>
+      {m?.indiriliyor && <p className="deger">{mb(m.indirilen)} / {mb(m.boyut)} MB</p>}
+      {m?.hata && <p className="hata">{m.hata}</p>}
+      {!m?.hazir && !m?.indiriliyor && (
+        <div className="satir-eylem">
+          <button className="dugme" onClick={() => void hat.modelIndir()}>Modeli indir ({m ? mb(m.boyut) : 190} MB, Wi-Fi önerilir)</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SesiniTanit({ kapat }: { kapat: () => void }) {
   useSaniye(hat.sesKaydi === "kayitta");

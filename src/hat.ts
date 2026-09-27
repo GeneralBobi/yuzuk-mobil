@@ -1,11 +1,15 @@
 // Kayıt → sunucu → Obsidian hattı. Arayüz yalnız bunu okur.
 //
+// 27.09.2026: not alma kaydı ses dosyası oluşturmaz. Telefon sesi bellekte kısa parçalara böler; her parça
+// bilgisayarda (bağlantı yoksa telefonda) metne döner ve atılır. Oturumun "yol"u o zaman döküm dosyasıdır
+// (yalnız metin); döküm bilgisayara gider, not yazılınca döküm de silinir. Dosyadan içe aktarma eski yoldan geçer.
+//
 // Bir oturumun ömrü:  yerel → gonderiliyor → sunucuda (sırada / işleniyor) → yazildi
 //                                                                         ↘ hata (tekrar denenebilir)
 // Ses telefonda not Obsidian'a yazılana kadar durur; sunucu hata verirse yeniden gönderilebilir.
 // Not yazılınca hem telefondaki ses hem sunucudaki sonuç silinir.
 
-import { yerel, type Paylasim } from "./yerel";
+import { yerel, type CanliDurum, type ModelDurumu, type Paylasim } from "./yerel";
 import protokol from "./vault/protokol.md?raw";
 
 // Telefon yalnız bulutu bilir (24.09.2026): bulut işi hesabın işlem düğümüne yönlendirir.
@@ -18,7 +22,7 @@ export interface Oturum {
   yol: string;
   baslangic: string; // ISO
   baslik?: string;
-  kaynak: "kayit" | "ice";
+  kaynak: "kayit" | "ice" | "canli"; // canli: yol bir döküm (metin) dosyasıdır, ses değil
   durum: Durum;
   sunucuId?: string;
   asama?: string;
@@ -96,6 +100,8 @@ class Hat {
   seviye = 0;
   okuma = 0; // her 250 ms'lik düzey okumasında artar: halka aynı düzeyi de yeni bir çizgi olarak işler
   uyari: string | null = null;
+  canli: CanliDurum | null = null; // süren kaydın parça durumu (kaçı bilgisayarda, kaçı telefonda metne döndü)
+  model: ModelDurumu | null = null; // çevrimdışı yazıya dökme modeli
   eslestirme: { durum: "bekliyor" | "tamam" | "hata"; metin: string } | null = null;
   sesIzi: SesIzi | null = null;
   sesKaydi: "yok" | "kayitta" | "isleniyor" = "yok";
@@ -127,6 +133,14 @@ class Hat {
   }
 
   async baslat() {
+    void this.modelYukle();
+    const c = await yerel.canliDurumu().catch(() => null);
+    if (c?.calisiyor) {
+      this.kaydediyor = true;
+      this.kayitBaslangic = c.baslangicMs;
+      this.canli = c;
+      this.seviyeIzle();
+    }
     const d = await yerel.kayitDurumu().catch(() => null);
     if (d?.calisiyor) {
       this.kaydediyor = true;
@@ -470,16 +484,29 @@ class Hat {
       return;
     }
     try {
-      await yerel.kayitBaslat();
-      const d = await yerel.kayitDurumu();
+      await yerel.canliBaslat({ sunucu: this.ayarlar.sunucu, anahtar: this.ayarlar.anahtar });
+      const d = await yerel.canliDurumu();
       if (!d.calisiyor) throw new Error(d.hata ?? "bilinmeyen hata");
       this.kaydediyor = true;
       this.kayitBaslangic = d.baslangicMs;
+      this.canli = d;
       this.seviyeIzle();
+      if (!this.model?.hazir) this.uyari = "Çevrimdışı yazıya dökme kurulu değil: bağlantı koparsa parçalar bellekte bekler. Ayarlar'dan modeli indir.";
     } catch (e) {
       this.uyari = `Kayıt başlamadı: ${(e as Error).message}`;
     }
     this.yayinla();
+  }
+
+  async modelYukle() {
+    this.model = await yerel.modelDurumu().catch(() => null);
+    this.yayinla();
+    if (this.model?.indiriliyor) window.setTimeout(() => void this.modelYukle(), 1000);
+  }
+
+  async modelIndir() {
+    await yerel.modelIndir().catch(() => undefined);
+    await this.modelYukle();
   }
 
   private seviyeIzle() {
@@ -488,7 +515,8 @@ class Hat {
         this.seviye = 0;
         return;
       }
-      const d = await yerel.kayitDurumu().catch(() => null);
+      const d = this.kaydediyor ? await yerel.canliDurumu().catch(() => null) : await yerel.kayitDurumu().catch(() => null);
+      if (this.kaydediyor && d) this.canli = d as CanliDurum;
       this.seviye = d?.seviye ?? 0;
       this.okuma++;
       this.yayinla();
@@ -498,13 +526,13 @@ class Hat {
   }
 
   async kayitDurdur() {
-    const r = await yerel.kayitDurdur();
+    const r = await yerel.canliDurdur();
     const bas = this.kayitBaslangic ?? Date.now();
     this.kaydediyor = false;
     this.kayitBaslangic = null;
-    if (r.yol) {
-      this.oturumlar.unshift({ id: String(bas), yol: r.yol, baslangic: new Date(bas).toISOString(), kaynak: "kayit",
-        durum: "yerel", sureSn: r.sureSn });
+    if (r.dokum) {
+      this.oturumlar.unshift({ id: String(bas), yol: r.dokum, baslangic: new Date(bas).toISOString(), kaynak: "canli",
+        durum: "yerel", sureSn: r.sureSn, asama: "Son parçalar metne çevriliyor" });
       this.sakla();
       void this.ilerlet();
     } else {
@@ -549,7 +577,10 @@ class Hat {
       this.ilerliyor = false;
     }
     if (this.yoklama) window.clearTimeout(this.yoklama);
-    if (this.oturumlar.some((o) => o.durum === "sunucuda")) this.yoklama = window.setTimeout(() => void this.ilerlet(), 5000);
+    // Döküm hâlâ telefonda metne dönüyorsa ya da bağlantı yoksa aralıkla yeniden denenir: not kaybolmaz.
+    const sunucuda = this.oturumlar.some((o) => o.durum === "sunucuda");
+    const telefonda = this.oturumlar.some((o) => o.kaynak === "canli" && o.durum === "yerel");
+    if (sunucuda || telefonda) this.yoklama = window.setTimeout(() => void this.ilerlet(), sunucuda ? 5000 : 15000);
   }
 
   async tekrarDene(o: Oturum) {
@@ -571,7 +602,57 @@ class Hat {
     this.sakla();
   }
 
+  /** Canlı kaydın dökümü (yalnız metin) bilgisayara gider; not yazma işi ses yolundakiyle aynı biçimde izlenir. */
+  private async dokumGonder(o: Oturum) {
+    let d: { dokum: string; bitti: boolean; cumle: number };
+    try {
+      d = await yerel.dokumOku({ yol: o.yol });
+    } catch (e) {
+      o.durum = "hata";
+      o.hata = `Döküm okunamadı — ${(e as Error).message}`;
+      this.sakla();
+      return;
+    }
+    const servis = await yerel.canliDurumu().catch(() => null);
+    // Servis hâlâ son parçaları çeviriyorsa beklenir. Servis öldüyse (uygulama kapatıldı) eldeki metin yine gönderilir.
+    if (!d.bitti && servis?.isleniyor && servis.dokum === o.yol) {
+      o.asama = servis.bekleyen ? `${servis.bekleyen} parça metne çevriliyor` : "Son parçalar metne çevriliyor";
+      this.yayinla();
+      return;
+    }
+    if (!d.cumle) {
+      o.durum = "yazildi";
+      o.asama = undefined;
+      o.baslik = o.baslik ?? "Sessiz kayıt";
+      o.ozet = "Not alınacak konuşma bulunamadı; vault'a bir şey yazılmadı.";
+      await yerel.dosyaSil({ yol: o.yol }).catch(() => undefined);
+      this.sakla();
+      return;
+    }
+    o.durum = "gonderiliyor";
+    o.asama = undefined;
+    o.hata = undefined;
+    this.yayinla();
+    try {
+      const r = await fetch(`${this.ayarlar.sunucu}/v1/dokum`, {
+        method: "POST",
+        headers: { ...this.basliklar, "Content-Type": "application/json" },
+        body: JSON.stringify({ dokum: JSON.parse(d.dokum), baslangic: o.baslangic, baslik: o.baslik, yazici: this.ayarlar.yazici || "claude" }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.detail ?? `Bulut ${r.status}`);
+      o.sunucuId = j.id;
+      o.durum = "sunucuda";
+      o.asama = "Sırada";
+    } catch (e) {
+      o.durum = "yerel";
+      o.hata = `Gönderilemedi — ${(e as Error).message}. Metin telefonda duruyor; bağlantı gelince yeniden gönderilir.`;
+    }
+    this.sakla();
+  }
+
   private async gonder(o: Oturum) {
+    if (o.kaynak === "canli") return this.dokumGonder(o);
     o.durum = "gonderiliyor";
     o.hata = undefined;
     this.yayinla();
