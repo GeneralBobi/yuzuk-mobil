@@ -60,6 +60,7 @@ h2 { font: 600 15px/1.3 var(--poppins); margin: 0 0 4px; }
 .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .bolum { margin-top: 30px; }
 .dipnot { margin-top: 34px; font: 400 12px/1.8 var(--lora); color: var(--soluk); }
+.dipnot a { color: var(--kor); }
 .hata { border: 1px solid var(--hata-cizgi); background: var(--hata-zemin); color: var(--hata-yazi); padding: 12px 14px;
   border-radius: 6px; font: 500 12px/1.6 var(--poppins); margin: 14px 0 0; }
 

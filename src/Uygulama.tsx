@@ -522,7 +522,11 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
         <input id="alt" className="girdi duz" defaultValue={a.altKlasor} onBlur={(e) => hat.ayarla({ altKlasor: e.target.value.trim() || "Yüzük" })} />
       </details>
 
-      <p className="dipnot">Ses yalnız not yazılana kadar telefonda durur; bulutta hiç saklanmaz. Ses izin yalnız bilgisayarında durur. Başkalarının özel bilgisi nota yazılmaz.</p>
+      <p className="dipnot">
+        Kayıtta ses dosyası oluşmaz; konuşma parça parça metne çevrilir ve yalnız metin, not yazılana kadar telefonda durur.
+        Ses izin yalnız bilgisayarında durur. Başkalarının özel bilgisi nota yazılmaz.{" "}
+        <a href="https://claudian.app/yuzuk/gizlilik" target="_blank" rel="noopener noreferrer">Gizlilik politikası</a>
+      </p>
     </section>
   );
 }

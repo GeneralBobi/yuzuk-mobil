@@ -7,8 +7,8 @@ android {
         applicationId "app.claudian.yuzuk"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 7001
-        versionName "0.7.1"
+        versionCode 7002
+        versionName "0.7.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // Çevrimdışı yazıya dökme (whisper.cpp): telefonlar arm64, emülatör x86_64.
         ndk { abiFilters "arm64-v8a", "x86_64" }
