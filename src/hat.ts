@@ -266,6 +266,32 @@ class Hat {
 
   /** Tek kullanımlık kodla sunucudan anahtarı alır. Kod bir kez kullanılınca biter. */
   private sonKod: string | null = null;
+  /** Dışarıdan açılan yuzuk://kur bağlantısının kodu: kullanıcı onaylamadan hiçbir hesap değişmez. */
+  bekleyenKod: string | null = null;
+
+  kodGeldi(kod: string) {
+    const temiz = kod.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!temiz || temiz === this.sonKod) return;
+    this.bekleyenKod = temiz;
+    this.yayinla();
+  }
+
+  kodOnayla() {
+    const k = this.bekleyenKod;
+    this.bekleyenKod = null;
+    if (k) void this.eslestir(k);
+    this.yayinla();
+  }
+
+  kodReddet() {
+    this.bekleyenKod = null;
+    this.yayinla();
+  }
+
+  /** Gönderilmemiş kayıt sayısı: hesap değişirken kullanıcıya gösterilir. */
+  get bekleyenKayit() {
+    return this.oturumlar.filter((o) => o.durum === "yerel" || o.durum === "gonderiliyor" || o.durum === "hata").length;
+  }
 
   async eslestir(kod: string) {
     const temiz = kod.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -283,6 +309,18 @@ class Hat {
       if (r.status === 403) throw new Error("Kod geçersiz ya da kullanılmış");
       if (!r.ok) throw new Error(`Sunucu ${r.status}`);
       const j = await r.json();
+      const onceki = this.ayarlar.anahtar;
+      if (onceki && onceki !== j.anahtar) {
+        // Hesap değişti: önceki hesabın gönderilmemiş kayıtları yeni hesaba kendiliğinden gitmez. Kullanıcı
+        // her birini ya açıkça gönderir ya siler (taramadaki P1: kayıtlar sessizce başka hesaba akmasın).
+        for (const o of this.oturumlar) {
+          if (o.durum === "yerel" || o.durum === "gonderiliyor" || o.durum === "sunucuda") {
+            o.durum = "hata";
+            o.sunucuId = undefined;
+            o.hata = "Hesap değişti: bu kayıt önceki eşleşmeye aitti. Yeni hesaba göndermek için Tekrar dene'ye bas ya da sil.";
+          }
+        }
+      }
       this.ayarla({ sunucu: j.sunucu, anahtar: j.anahtar });
       this.eslestirme = { durum: "tamam", metin: "Eşleşti" };
       void this.baglantiDene().then(() => this.hatirlaticiCek());
@@ -579,8 +617,10 @@ class Hat {
     if (this.yoklama) window.clearTimeout(this.yoklama);
     // Döküm hâlâ telefonda metne dönüyorsa ya da bağlantı yoksa aralıkla yeniden denenir: not kaybolmaz.
     const sunucuda = this.oturumlar.some((o) => o.durum === "sunucuda");
-    const telefonda = this.oturumlar.some((o) => o.kaynak === "canli" && o.durum === "yerel");
-    if (sunucuda || telefonda) this.yoklama = window.setTimeout(() => void this.ilerlet(), sunucuda ? 5000 : 15000);
+    // Gönderilemeyen kayıt da (bağlantı koptu, bilgisayar kapalı) aralıkla kendiliğinden yeniden denenir:
+    // 27.09'da "Software caused connection abort" sonrası kaydın elle yeniden gönderilmesi gerekmişti.
+    const telefonda = this.oturumlar.some((o) => o.durum === "yerel");
+    if (sunucuda || telefonda) this.yoklama = window.setTimeout(() => void this.ilerlet(), sunucuda ? 5000 : 30000);
   }
 
   async tekrarDene(o: Oturum) {
@@ -681,7 +721,7 @@ class Hat {
       o.asama = "Sırada";
     } catch (e) {
       o.durum = "yerel";
-      o.hata = `Gönderilemedi — ${(e as Error).message}`;
+      o.hata = `Gönderilemedi — ${baglantiHatasi((e as Error).message)}`;
     }
     this.sakla();
   }
@@ -782,6 +822,17 @@ class Hat {
       metin: hat.length ? `${hat.length} hatırlatıcı: ${hat.map((h) => `${h.tarih} ${h.metin}`).join(" · ")}` : `Obsidian → ${alt}`,
     });
   }
+}
+
+/** Android'in ham ağ hatalarını anlaşılır cümleye çevirir; kayıt her durumda telefonda kalır ve yeniden denenir. */
+export function baglantiHatasi(ham: string): string {
+  const m = ham.toLowerCase();
+  if (/connection abort|connection reset|broken pipe|unexpected end of stream|socket closed/.test(m))
+    return "bağlantı gönderim sırasında koptu. Kayıt telefonda duruyor; bağlantı gelince kendiliğinden yeniden gönderilecek.";
+  if (/timeout|timed out/.test(m)) return "bağlantı çok yavaş. Kayıt telefonda duruyor; yeniden denenecek.";
+  if (/unable to resolve host|failed to connect|network is unreachable|no route/.test(m))
+    return "internet yok. Kayıt telefonda duruyor; bağlantı gelince gönderilecek.";
+  return ham;
 }
 
 export const hat = new Hat();

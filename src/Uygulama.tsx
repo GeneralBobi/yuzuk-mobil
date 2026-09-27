@@ -39,6 +39,33 @@ function gunAdi(iso: string) {
 // Ekran geçişlerinde animasyon yok (24.09.2026): Boran'ın telefonunda çıkış animasyonu tamamlanmadı, yeni ekran hiç
 // açılmadı ve siyah ekran kaldı. Ekran anında değişir; hiçbir içerik bir animasyonun bitmesini beklemez.
 
+function EslestirmeOnayi() {
+  const kod = hat.bekleyenKod!;
+  const eslesik = !!hat.ayarlar.anahtar;
+  const bekleyen = hat.bekleyenKayit;
+  return (
+    <div className="onay-perde" role="dialog" aria-modal="true" aria-labelledby="onay-baslik">
+      <div className="onay-kutu">
+        <h2 id="onay-baslik">{eslesik ? "Başka bir bilgisayara geçilsin mi?" : "Bu telefon eşleştirilsin mi?"}</h2>
+        <p className="aciklama">
+          Bir bağlantı bu telefonu şu kodla eşleştirmek istiyor: <code>{kod.slice(0, 4)}-{kod.slice(4)}</code>. Kodu kendi
+          bilgisayarındaki Claudian'dan sen almadıysan vazgeç.
+        </p>
+        {eslesik && (
+          <p className="aciklama">
+            Şu an başka bir bilgisayara bağlısın. Onaylarsan notlar yeni bilgisayara gider.
+            {bekleyen ? ` Gönderilmemiş ${bekleyen} kayıt yeni hesaba kendiliğinden gitmez; her birini sen seçersin.` : ""}
+          </p>
+        )}
+        <div className="satir-eylem">
+          <button className="dugme birincil" onClick={() => hat.kodOnayla()}>Eşleştir</button>
+          <button className="metin-dugme" onClick={() => hat.kodReddet()}>Vazgeç</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Uygulama() {
   useHat();
   const [sekme, setSekme] = useState<Sekme>(() => (hat.hazir ? "dinle" : "ayarlar"));
@@ -50,7 +77,7 @@ export function Uygulama() {
       const kod = url ? new URL(url.replace("yuzuk://", "https://yuzuk/")).searchParams.get("kod") : null;
       if (kod) {
         setSekme("ayarlar");
-        void hat.eslestir(kod);
+        hat.kodGeldi(kod); // onay penceresi açılır; hesap ancak kullanıcı onaylayınca değişir
       }
     };
     void CapApp.getLaunchUrl().then((r) => linkIsle(r?.url));
@@ -128,6 +155,7 @@ export function Uygulama() {
           </nav>
         )}
       </div>
+      {hat.bekleyenKod && <EslestirmeOnayi />}
     </>
   );
 }
