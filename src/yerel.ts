@@ -44,6 +44,10 @@ export interface YuzukEklentisi {
   hatirlaticiKur(o: { id: string; zamanMs: number; baslik: string; metin: string }): Promise<{ kuruldu: boolean }>;
   hatirlaticiSayisi(): Promise<{ sayi: number }>;
   hatirlaticiEsitle(o: { liste: { id: string; zamanMs: number; bugun: boolean; baslik: string; metin: string }[] }): Promise<{ kurulan: number }>;
+  /** 1.5.0: bildirimdeki "Yaptım / Yarın tekrar" uygulama açılmadan gidebilsin diye bulut adresi ve cihaz anahtarı. */
+  hatirlaticiBaglanti(o: { sunucu: string; anahtar: string }): Promise<void>;
+  /** Ağ yokken basılmış düğmeler; alınınca telefondaki sıradan çıkar. */
+  hatirlaticiIslemleri(): Promise<{ islemler: { kimlik: string; islem: "yapildi" | "yarin"; an: number }[] }>;
   bildirimIzni(): Promise<{ verildi: boolean }>;
   paylasimAl(): Promise<Paylasim>;
   vaultListe(o: { agac: string }): Promise<{ dosyalar: { yol: string; boyut: number; mtime: number }[] }>;

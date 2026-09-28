@@ -362,9 +362,30 @@ class Hat {
   hatirlaticilar: { sayi: number; son?: string; metin: string } = oku("pc-hatirlaticilar", { sayi: 0, metin: "" });
   private cekiyor = false;
 
+  /** Bildirim düğmeleri (1.5.0): gönderilemeyenler burada bekler, her hatırlatıcı bakışında yeniden denenir. */
+  private async islemleriGonder() {
+    const bekleyen = oku<{ kimlik: string; islem: string; an: number }[]>("bekleyen-islemler", []);
+    const gelen = await yerel.hatirlaticiIslemleri().then((r) => r.islemler ?? []).catch(() => []);
+    const kalan: typeof bekleyen = [];
+    const hafta = Date.now() - 7 * 864e5;
+    for (const i of [...bekleyen, ...gelen]) {
+      if (!/^[0-9a-f]{16}$/.test(i.kimlik) || !["yapildi", "yarin"].includes(i.islem) || i.an < hafta) continue;
+      try {
+        const r = await fetch(`${this.ayarlar.sunucu}/v1/hatirlaticilar/${i.kimlik}`, {
+          method: "POST", headers: { ...this.basliklar, "Content-Type": "application/json" }, body: JSON.stringify({ islem: i.islem }) });
+        if (r.status >= 500 || r.status === 401 || r.status === 429) kalan.push(i);
+      } catch {
+        kalan.push(i);
+      }
+    }
+    localStorage.setItem("bekleyen-islemler", JSON.stringify(kalan));
+  }
+
   async hatirlaticiCek() {
+    await yerel.hatirlaticiBaglanti({ sunucu: this.ayarlar.sunucu, anahtar: this.ayarlar.anahtar }).catch(() => undefined);
     if (!this.ayarlar.anahtar || this.cekiyor) return;
     this.cekiyor = true;
+    await this.islemleriGonder().catch(() => undefined);
     const guncelle = (h: Partial<Hat["hatirlaticilar"]>) => {
       this.hatirlaticilar = { ...this.hatirlaticilar, ...h };
       localStorage.setItem("pc-hatirlaticilar", JSON.stringify(this.hatirlaticilar));
@@ -770,7 +791,12 @@ class Hat {
       if (!r.ok) throw new Error(`Sunucu ${r.status}`);
       const j = await r.json();
       if (j.durum === "hazir") {
-        if (j.sonuc?.not_md?.trim()) {
+        if (j.sonuc?.not_md?.trim() && j.sonuc.pc_notu) {
+          // 1.5.0: not bilgisayarın vault'una yazıldı (aynı ad, aynı klasör); telefon ikinci kopyayı yazmaz, vault
+          // eşitlemesiyle o not gelir. Tarihli işler bilgisayarın hatırlatıcı notundan düğmeli bildirim olarak kurulur.
+          this.pcNotunuIsle(o, j.sonuc);
+          void this.hatirlaticiCek();
+        } else if (j.sonuc?.not_md?.trim()) {
           await this.obsidianaYaz(o, j.sonuc);
         } else {
           // Konuşma yoksa vault'a boş dosya yazılmaz.
@@ -796,6 +822,25 @@ class Hat {
   }
 
   // ---------------- Obsidian ----------------
+
+  private pcNotunuIsle(o: Oturum, s: { baslik?: string; not_md?: string; pc_notu?: string; yazici?: string; mahrem?: number;
+    konusmaci?: { sayi?: number; sen?: boolean; sureler?: Record<string, number> } }) {
+    o.mahrem = s.mahrem || undefined;
+    const k = s.konusmaci;
+    if (k?.sayi) {
+      o.kisi = k.sayi;
+      const toplam = Object.values(k.sureler ?? {}).reduce((a, b) => a + b, 0);
+      if (k.sen && toplam) o.senPayi = (k.sureler?.["Sen"] ?? 0) / toplam;
+    }
+    o.yazan = s.yazici ? (YAZICILAR[s.yazici] ?? s.yazici) : undefined;
+    o.notAdi = String(s.pc_notu).split("/").pop();
+    o.baslik = s.baslik?.trim() || o.baslik;
+    const satirlar = (s.not_md ?? "").split("\n");
+    const ozetBasi = satirlar.findIndex((l) => /^#{2,4}\s*Özet/i.test(l));
+    const ilk = ozetBasi >= 0 ? satirlar.slice(ozetBasi + 1).find((l) => l.trim() && !l.startsWith("#")) : undefined;
+    o.ozet = ilk ? ilk.replace(/^[-*]\s*/, "").replace(/\*\*/g, "").split(/(?<=[.!?])\s/)[0].slice(0, 180) : undefined;
+    void yerel.bildir({ baslik: `Not hazır · ${o.baslik ?? "Not"}`, metin: "Bilgisayarın vault'una yazıldı." }).catch(() => undefined);
+  }
 
   private async obsidianaYaz(o: Oturum, s: { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: string; saat?: string; metin: string }[];
     konusmaci?: { sayi?: number; sen?: boolean; sureler?: Record<string, number> }; yazici?: string; istenen_yazici?: string; mahrem?: number }) {

@@ -595,6 +595,25 @@ public class YuzukEklentisi extends Plugin {
         }
     }
 
+    /** 1.5.0: bildirim düğmeleri uygulama açılmadan buluta gidebilsin diye adres ve cihaz anahtarı. */
+    @PluginMethod
+    public void hatirlaticiBaglanti(PluginCall call) {
+        HatirlaticiAlici.baglanti(getContext(), call.getString("sunucu", ""), call.getString("anahtar", ""));
+        call.resolve();
+    }
+
+    /** Ağ yokken basılmış "Yaptım / Yarın tekrar" düğmeleri: uygulama gönderir. */
+    @PluginMethod
+    public void hatirlaticiIslemleri(PluginCall call) {
+        try {
+            JSObject r = new JSObject();
+            r.put("islemler", new JSArray(HatirlaticiAlici.islemleriAl(getContext()).toString()));
+            call.resolve(r);
+        } catch (Exception e) {
+            call.reject(e.getMessage() != null ? e.getMessage() : e.toString());
+        }
+    }
+
     @PluginMethod
     public void hatirlaticiSayisi(PluginCall call) {
         call.resolve(sonuc("sayi", HatirlaticiAlici.sayi(getContext())));
