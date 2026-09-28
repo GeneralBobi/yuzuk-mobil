@@ -48,14 +48,10 @@ function EslestirmeOnayi() {
       <div className="onay-kutu">
         <h2 id="onay-baslik">{eslesik ? "Başka bir bilgisayara geçilsin mi?" : "Bu telefon eşleştirilsin mi?"}</h2>
         <p className="aciklama">
-          Bir bağlantı bu telefonu şu kodla eşleştirmek istiyor: <code>{kod.slice(0, 4)}-{kod.slice(4)}</code>. Kodu kendi
-          bilgisayarındaki Claudian'dan sen almadıysan vazgeç.
+          <code>{kod.slice(0, 4)}-{kod.slice(4)}</code> · Kodu kendi Claudian'ından almadıysan vazgeç.
         </p>
-        {eslesik && (
-          <p className="aciklama">
-            Şu an başka bir bilgisayara bağlısın. Onaylarsan notlar yeni bilgisayara gider.
-            {bekleyen ? ` Gönderilmemiş ${bekleyen} kayıt yeni hesaba kendiliğinden gitmez; her birini sen seçersin.` : ""}
-          </p>
+        {eslesik && bekleyen > 0 && (
+          <p className="aciklama">Gönderilmemiş {bekleyen} kayıt kendiliğinden taşınmaz.</p>
         )}
         <div className="satir-eylem">
           <button className="dugme birincil" onClick={() => hat.kodOnayla()}>Eşleştir</button>
@@ -189,7 +185,7 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
   useSaniye(hat.kaydediyor);
   const son = hat.oturumlar[0];
   const bugun = new Date().toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" });
-  const eksik = !hat.ayarlar.anahtar ? "Telefonu eşleştir ve Obsidian klasörünü seç." : "Obsidian klasörünü seç.";
+  const eksik = !hat.ayarlar.anahtar ? "Eşleştir · klasör seç" : "Klasör seç";
 
   return (
     <section className="dinle">
@@ -197,7 +193,7 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
         <button className="kurulum-satiri" onClick={() => git("ayarlar")}>
           <span>
             <strong>Kurulum bitmedi</strong>
-            <span>{eksik} Kayıt yine de alınır; not kurulum bitince yazılır.</span>
+            <span>{eksik}</span>
           </span>
           <ArrowRight size={18} />
         </button>
@@ -235,11 +231,7 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
           )}
         </Halka>
       </div>
-      <p className="aciklama halka-durum">
-        {hat.kaydediyor
-          ? "Ekranı kilitleyebilirsin. Ses kaydedilmez; konuşma parça parça metne çevrilir. Durdurmak için halkaya dokun."
-          : "Halkaya dokun ve telefonu bırak. Durdurduğunda konuşmanın notu Obsidian'a yazılır."}
-      </p>
+      {hat.kaydediyor && <p className="aciklama halka-durum">Ekranı kilitleyebilirsin.</p>}
       {hat.kaydediyor && hat.canli && <ParcaDurumu />}
 
       {hat.uyari && <p className="hata" role="alert">{hat.uyari}</p>}
@@ -278,12 +270,9 @@ function Notlar() {
   return (
     <section>
       <h1>Notlar</h1>
-      <p className="aciklama">
-        Her kayıt not olunca Obsidian'da <em>{hat.ayarlar.vaultAdi ?? "vault"}/{hat.ayarlar.altKlasor}</em> klasörüne yazılır; ses o an telefondan silinir.
-      </p>
       {hat.oturumlar.length === 0 ? (
         <div className="bos">
-          <p className="aciklama">Henüz kayıt yok. Dinle'deki halkaya dokunduğunda ilk kayıt burada belirir ve dört durağı geçer: telefonda, bulutta, yazılıyor, Obsidian'da.</p>
+          <p className="aciklama">Henüz kayıt yok.</p>
         </div>
       ) : (
         gruplar.map((g) => (
@@ -372,7 +361,6 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
   return (
     <section>
       <h1>Ayarlar</h1>
-      <p className="aciklama">Kayıt telefondan buluta, oradan bilgisayarındaki işlem düğümüne gider; not buraya döner ve Obsidian'a yazılır.</p>
 
       <div className="satirlar">
         <div className="satir">
@@ -392,7 +380,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
             </>
           ) : (
             <>
-              <p className="aciklama">Bilgisayarındaki Claudian'da Yüzük → Telefon uygulaması → Telefonu eşleştir. QR'ı okut ya da koddaki sekiz harfi yaz.</p>
+              <p className="aciklama">Claudian → Yüzük → Telefonu bağla</p>
               <div className="kod-satiri">
                 <input className="girdi" value={kod} onChange={(e) => setKod(e.target.value.toUpperCase())} placeholder="ABCD2345"
                   autoCapitalize="characters" autoCorrect="off" spellCheck={false} aria-label="Eşleştirme kodu" />
@@ -411,7 +399,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
             <span className={`etiket ${a.vault ? "" : "soluk"}`}>{a.vault ? "seçildi" : "seçilmedi"}</span>
           </div>
           {a.vault ? <p className="deger">{a.vaultAdi}/{a.altKlasor}</p>
-            : <p className="aciklama">Telefondaki vault klasörünü seç (ör. <em>Claudian</em>). Notlar içindeki <em>{a.altKlasor}</em> klasörüne yazılır.</p>}
+            : null}
           <div className="satir-eylem">
             <button className={a.vault ? "metin-dugme kor" : "dugme birincil"} onClick={() => void hat.vaultSec()}>{a.vault ? "Değiştir" : "Klasörü seç"}</button>
           </div>
@@ -425,10 +413,6 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
                 {hat.esitleme.durum === "calisiyor" ? "eşitleniyor" : hat.esitleme.son ? `son: ${gunAdi(hat.esitleme.son).toLocaleLowerCase("tr")} ${saat(hat.esitleme.son)}` : "hiç eşitlenmedi"}
               </span>
             </div>
-            <p className="aciklama">
-              Telefondaki vault ile bilgisayarındaki vault karşılıklı eşitlenir. Hangi tarafta değiştiyse o kazanır; ikisi de değiştiyse
-              daha yeni olan. Hiçbir not silinmez, üzerine yazılan sürüm bilgisayarda yedeklenir. Notlar buluttan akarak geçer, saklanmaz.
-            </p>
             {hat.esitleme.ozet && (
               <p className="deger">
                 bilgisayar {hat.esitleme.ozet.pc} not · telefon {hat.esitleme.ozet.tel} not
@@ -455,10 +439,6 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
                 {hat.hatirlaticilar.son ? `${hat.hatirlaticilar.sayi} kurulu` : "bakılmadı"}
               </span>
             </div>
-            <p className="aciklama">
-              Bilgisayarındaki vault'ta tarihi olan açık işler bu telefonda bildirim olur: saati yazılıysa o saatte, değilse o gün
-              sabah 09:00'da. İş bilgisayarda yapıldı olarak işaretlenince bildirimi de kalkar.
-            </p>
             {hat.hatirlaticilar.son && (
               <p className="deger">son bakış: {gunAdi(hat.hatirlaticilar.son).toLocaleLowerCase("tr")} {saat(hat.hatirlaticilar.son)}</p>
             )}
@@ -476,11 +456,6 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
             <h2>Sesin</h2>
             <span className={`etiket ${iz?.var ? "" : "soluk"}`}>{iz?.var ? "tanındı" : "tanıtılmadı"}</span>
           </div>
-          <p className="aciklama">
-            {iz?.var
-              ? "Notlarda senin söylediklerin ayrı tutulur: verdiğin sözler, sorduğun sorular."
-              : "Sesini bir kez tanıtırsan notlar kimin ne dediğini bilir ve senin söylediklerini ayırır."}
-          </p>
           {iz?.var && iz.olusturuldu && (
             <p className="deger">{new Date(iz.olusturuldu).toLocaleDateString("tr-TR")} · {iz.konusma_sn} sn okuma</p>
           )}
@@ -530,10 +505,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
               </div>
             ) : (
               <div className="uyari-kutu" role="alert">
-                <p className="aciklama">
-                  Hesabın, eşleşen bütün telefonların, buluttaki kayıt sayıların ve bilgisayarındaki ses izin silinir. Obsidian'daki
-                  notların silinmez. Bu geri alınamaz.
-                </p>
+                <p className="aciklama">Hesap, telefonlar ve ses izi silinir; Obsidian notların kalır. Geri alınamaz.</p>
                 <div className="satir-eylem">
                   <button className="dugme" disabled={hat.hesapSilme.durum === "siliniyor"} onClick={() => void hat.hesapSil()}>Evet, hesabımı sil</button>
                   <button className="metin-dugme" onClick={() => setSilOnay(false)}>Vazgeç</button>
@@ -578,14 +550,7 @@ function CevrimdisiModel() {
         <h2>Çevrimdışı yazıya dökme</h2>
         <span className={`etiket ${m?.hazir ? "" : "soluk"}`}>{m?.hazir ? "kurulu" : m?.indiriliyor ? "iniyor" : "kurulu değil"}</span>
       </div>
-      <p className="aciklama">
-        İsteğe bağlı. Ses dosyası tutulmadığı için bağlantı yokken konuşmayı kaybetmemenin tek yolu onu telefonda yazıya
-        dökmektir; bu model yalnız bunu yapar. Bağlantı gelince metin bilgisayarına gider ve notu yine orası yazdırır.
-      </p>
-      <p className="aciklama">
-        İnen dosya: açık kaynak Whisper konuşma tanıma modeli (whisper.cpp, <em>small</em>, 5 bit sıkıştırılmış,
-        ggml-small-q5_1), Hugging Face üzerinden bir kez. Not yazmaz, internete bir şey göndermez.
-      </p>
+      <p className="aciklama">Bağlantı yokken telefonda yazıya döker · Whisper small</p>
       {m?.indiriliyor && <p className="deger">{mb(m.indirilen)} / {mb(m.boyut)} MB</p>}
       {m?.hata && <p className="hata">{m.hata}</p>}
       {!m?.hazir && !m?.indiriliyor && (
@@ -639,10 +604,7 @@ function SesiniTanit({ kapat }: { kapat: () => void }) {
         <button className="geri" onClick={kapat} aria-label="Geri"><ArrowLeft size={22} /></button>
       </div>
       <h1>Sesini tanıt</h1>
-      <p className="aciklama">
-        Aşağıdaki metni normal sesinle, sessiz bir yerde oku; yirmi beş saniye yeter. Kayıttan yalnız bir ses izi çıkarılır,
-        kayıt hemen silinir. Ses izi bilgisayarında durur; istediğin an Ayarlar'dan silebilirsin.
-      </p>
+      <p className="aciklama">Sessiz bir yerde, normal sesinle · 25 sn</p>
       <div className="okuma">
         <p>Sabah derse biraz geç kaldım; hoca konuyu anlatmaya başlamıştı bile. Arka sıraya oturup defterimi açtım ve tahtadaki şekli hızlıca çizdim.</p>
         <p>Öğle arasında Deniz'le kantinde buluştuk, hafta sonu için küçük bir plan yaptık. Akşam eve dönerken hem ödevimi hem de yarınki sunumu düşündüm.</p>
