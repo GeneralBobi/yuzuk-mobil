@@ -495,20 +495,18 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
         <div className="satir">
           <h2>Notu yazan</h2>
           <div className="secim" role="radiogroup" aria-label="Notu yazan AI">
-            {Object.entries(YAZICILAR).map(([id, ad]) => {
-              // 1.0.0'dan beri notu yalnız bulutun araçsız çağrısı yazar; ChatGPT ve Gemini, araçsız API yazıcısı olarak
-              // gelene kadar kapalı. Seçilebilir görünmeleri yanlış bir söz olurdu.
-              const kapali = id !== "claude";
-              const kurulu = !kapali && (!hat.kuruluYazicilar || hat.kuruluYazicilar.includes(id));
+            {Object.entries(YAZICILAR).filter(([id]) => id !== "gemini").map(([id, ad]) => {
+              // 1.5.0: Claude bulutta, ChatGPT bilgisayarda (Codex, bütün araçları kapalı) yazar; ikisi de araçsız.
+              // Bilgisayarda kurulu olmayan yazıcı seçilemez.
+              const kurulu = !hat.kuruluYazicilar || hat.kuruluYazicilar.includes(id);
               return (
-                <button key={id} role="radio" aria-checked={!kapali && (a.yazici === id || a.yazici !== "claude")} disabled={!kurulu}
+                <button key={id} role="radio" aria-checked={(a.yazici || "claude") === id} disabled={!kurulu}
                   className="secenek" onClick={() => hat.ayarla({ yazici: id })}>
-                  {ad}{kapali ? <small>şimdilik kapalı</small> : !kurulu && <small>kurulu değil</small>}
+                  {ad}{!kurulu && <small>bilgisayarda yok</small>}
                 </button>
               );
             })}
           </div>
-          <p className="aciklama" style={{ marginTop: 10 }}>Mahrem cümleler önce çıkarılır; kalan döküm Claudian bulutuna gider ve notu araçsız tek bir çağrı yazar. Konuşmadaki hiçbir cümle talimat sayılmaz.</p>
         </div>
 
         {hat.hesap && (
