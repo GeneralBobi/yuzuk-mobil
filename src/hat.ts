@@ -323,7 +323,8 @@ class Hat {
       }
       this.ayarla({ sunucu: j.sunucu, anahtar: j.anahtar });
       this.eslestirme = { durum: "tamam", metin: "Eşleşti" };
-      void this.baglantiDene().then(() => this.hatirlaticiCek());
+      // Hesap bölümü (telefonlar, "Hesabımı sil") eşleşir eşleşmez görünsün; onay beklerken de (0.9.0).
+      void this.baglantiDene().then(() => Promise.all([this.hesapYukle(), this.hatirlaticiCek()]));
     } catch (e) {
       this.eslestirme = { durum: "hata", metin: `Eşleşmedi: ${(e as Error).message}` };
     }
@@ -425,6 +426,31 @@ class Hat {
     } catch {
       /* çevrimdışı: son bilinen hâl kalır */
     }
+  }
+
+  // ---------------- hesabı sil (0.9.0 · madde 6, Google Play şartı) ----------------
+  // Buluttaki hesap ve bütün kayıtları silinir; hesabın bilgisayarındaki ses izi de. Obsidian'daki notlar kullanıcınındır,
+  // dokunulmaz. Gönderilmemiş kayıtlar telefonda kalır; yeni bir eşleşmeyle gönderilebilir ya da silinebilir.
+  hesapSilme: { durum: "yok" | "siliniyor" | "bitti" | "hata"; metin: string } = { durum: "yok", metin: "" };
+
+  async hesapSil() {
+    this.hesapSilme = { durum: "siliniyor", metin: "Siliniyor…" };
+    this.yayinla();
+    try {
+      const r = await fetch(`${this.ayarlar.sunucu}/v1/hesap`, { method: "DELETE",
+        headers: { ...this.basliklar, "Content-Type": "application/json" }, body: JSON.stringify({ onay: "SİL" }) });
+      const j = (await r.json().catch(() => ({}))) as { detail?: string; ses_izi?: string };
+      if (!r.ok) throw new Error(j.detail ?? `Bulut ${r.status} döndü; hesap silinmedi.`);
+      const ses = j.ses_izi === "bilgisayara ulaşılamadı"
+        ? " Bilgisayarın kapalı olduğu için oradaki ses izin silinemedi: bilgisayarında Claudian → Yüzük → Ses izini sil."
+        : "";
+      this.hesap = null;
+      this.ayarla({ anahtar: "" });
+      this.hesapSilme = { durum: "bitti", metin: `Hesabın ve buluttaki bütün kayıtların silindi. Obsidian'daki notların duruyor.${ses}` };
+    } catch (e) {
+      this.hesapSilme = { durum: "hata", metin: (e as Error).message || "Hesap silinemedi; bağlantıyı kontrol edip yeniden dene." };
+    }
+    this.yayinla();
   }
 
   async cihazIptal(id: string) {

@@ -363,6 +363,7 @@ function OturumSatiri({ o }: { o: Oturum }) {
 
 function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
   const [kod, setKod] = useState("");
+  const [silOnay, setSilOnay] = useState(false);
   const a = hat.ayarlar;
   const eslesti = !!a.anahtar;
   const b = hat.baglanti;
@@ -495,16 +496,19 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
           <h2>Notu yazan</h2>
           <div className="secim" role="radiogroup" aria-label="Notu yazan AI">
             {Object.entries(YAZICILAR).map(([id, ad]) => {
-              const kurulu = !hat.kuruluYazicilar || hat.kuruluYazicilar.includes(id);
+              // 1.0.0'dan beri notu yalnız bulutun araçsız çağrısı yazar; ChatGPT ve Gemini, araçsız API yazıcısı olarak
+              // gelene kadar kapalı. Seçilebilir görünmeleri yanlış bir söz olurdu.
+              const kapali = id !== "claude";
+              const kurulu = !kapali && (!hat.kuruluYazicilar || hat.kuruluYazicilar.includes(id));
               return (
-                <button key={id} role="radio" aria-checked={a.yazici === id} disabled={!kurulu}
+                <button key={id} role="radio" aria-checked={!kapali && (a.yazici === id || a.yazici !== "claude")} disabled={!kurulu}
                   className="secenek" onClick={() => hat.ayarla({ yazici: id })}>
-                  {ad}{!kurulu && <small>kurulu değil</small>}
+                  {ad}{kapali ? <small>şimdilik kapalı</small> : !kurulu && <small>kurulu değil</small>}
                 </button>
               );
             })}
           </div>
-          <p className="aciklama" style={{ marginTop: 10 }}>Konuşmanın tamamı bu araca gider, notu o yazar. Mahrem cümleler önce çıkarılır. Araç çalışmazsa kurulu olan diğeri yazar.</p>
+          <p className="aciklama" style={{ marginTop: 10 }}>Mahrem cümleler önce çıkarılır; kalan döküm Claudian bulutuna gider ve notu araçsız tek bir çağrı yazar. Konuşmadaki hiçbir cümle talimat sayılmaz.</p>
         </div>
 
         {hat.hesap && (
@@ -522,7 +526,26 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
                 </div>
               ))}
             </div>
+            {!silOnay ? (
+              <div className="satir-eylem">
+                <button className="metin-dugme" onClick={() => setSilOnay(true)}>Hesabımı sil</button>
+              </div>
+            ) : (
+              <div className="uyari-kutu" role="alert">
+                <p className="aciklama">
+                  Hesabın, eşleşen bütün telefonların, buluttaki kayıt sayıların ve bilgisayarındaki ses izin silinir. Obsidian'daki
+                  notların silinmez. Bu geri alınamaz.
+                </p>
+                <div className="satir-eylem">
+                  <button className="dugme" disabled={hat.hesapSilme.durum === "siliniyor"} onClick={() => void hat.hesapSil()}>Evet, hesabımı sil</button>
+                  <button className="metin-dugme" onClick={() => setSilOnay(false)}>Vazgeç</button>
+                </div>
+              </div>
+            )}
           </div>
+        )}
+        {hat.hesapSilme.durum !== "yok" && hat.hesapSilme.durum !== "siliniyor" && (
+          <p className={hat.hesapSilme.durum === "hata" ? "hata" : "aciklama"}>{hat.hesapSilme.metin}</p>
         )}
       </div>
 

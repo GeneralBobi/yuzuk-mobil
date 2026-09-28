@@ -207,3 +207,4 @@ details.gelismis label { display: block; font: 500 11px/1 var(--poppins); color:
 .onay-kutu { width: 100%; max-width: 520px; background: var(--yuzey); border: 1px solid var(--cizgi-2); border-radius: 12px; padding: 20px; }
 .onay-kutu h2 { margin: 0 0 8px; font: 600 18px/1.3 var(--poppins); }
 .onay-kutu code { font: 500 14px var(--mono); letter-spacing: .1em; color: var(--yazi); }
+.uyari-kutu { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--cizgi); border-radius: 10px; background: var(--yuzey-2); }
