@@ -51,6 +51,22 @@ import java.util.UUID;
         })
 public class YuzukEklentisi extends Plugin {
 
+    // ------------------------------------------------ kenar boşlukları (0.8.0)
+
+    /**
+     * Capacitor'un SystemBars eklentisi sistem çubuğu boşluklarını --safe-area-inset-* olarak sayfaya yazar, ama bunu
+     * yalnız boşluklar değiştiğinde yapar. İlk değer sayfa yüklenmeden önce gelirse yazıldığı belge değişir ve değer
+     * kaybolur; CSS o zaman env() yedeğine düşer ve eski WebView'lerde boşluk iki kez uygulanır (Hanne'nin üç tuşlu
+     * gezinmesinde alt menü aşağıya oturmayıp yukarıda boşluk bıraktı). Sayfa hazır olunca boşluklar yeniden istenir.
+     */
+    @PluginMethod
+    public void kenarlariYenile(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            androidx.core.view.ViewCompat.requestApplyInsets(getActivity().getWindow().getDecorView());
+            call.resolve();
+        });
+    }
+
     // ------------------------------------------------ izin
 
     @PluginMethod

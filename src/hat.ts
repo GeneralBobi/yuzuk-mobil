@@ -542,6 +542,12 @@ class Hat {
     if (this.model?.indiriliyor) window.setTimeout(() => void this.modelYukle(), 1000);
   }
 
+  async modelSil() {
+    await yerel.modelSil().catch(() => undefined);
+    this.model = await yerel.modelDurumu().catch(() => null);
+    this.yayinla();
+  }
+
   async modelIndir() {
     await yerel.modelIndir().catch(() => undefined);
     await this.modelYukle();

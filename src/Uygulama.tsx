@@ -73,6 +73,8 @@ export function Uygulama() {
 
   useEffect(() => {
     void hat.baslat();
+    // Sistem çubuğu boşlukları sayfa hazırken yeniden yazılsın (üç tuşlu gezinmede alt menü boşluk bırakıyordu).
+    void yerel.kenarlariYenile().catch(() => undefined);
     const linkIsle = (url?: string | null) => {
       const kod = url ? new URL(url.replace("yuzuk://", "https://yuzuk/")).searchParams.get("kod") : null;
       if (kod) {
@@ -196,6 +198,16 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
           <span>
             <strong>Kurulum bitmedi</strong>
             <span>{eksik} Kayıt yine de alınır; not kurulum bitince yazılır.</span>
+          </span>
+          <ArrowRight size={18} />
+        </button>
+      )}
+      {hat.hazir && (hat.baglanti.durum === "kapali" || hat.baglanti.durum === "anahtar") && hat.baglanti.metin && (
+        // Bilgisayar yoksa, onay bekliyorsa ya da kapalıysa telefon bunu dinleme ekranında da söyler; eşleşme sessizce takılmaz.
+        <button className="kurulum-satiri" onClick={() => git("ayarlar")}>
+          <span>
+            <strong>Not şu an yazılamıyor</strong>
+            <span>{hat.baglanti.metin}</span>
           </span>
           <ArrowRight size={18} />
         </button>
@@ -546,14 +558,23 @@ function CevrimdisiModel() {
         <span className={`etiket ${m?.hazir ? "" : "soluk"}`}>{m?.hazir ? "kurulu" : m?.indiriliyor ? "iniyor" : "kurulu değil"}</span>
       </div>
       <p className="aciklama">
-        Bağlantı koparsa konuşma bu telefonda metne çevrilir ve not kaybolmaz; bağlantı gelince metin bilgisayarına gider.
-        Ses hiçbir durumda kaydedilmez.
+        İsteğe bağlı. Ses dosyası tutulmadığı için bağlantı yokken konuşmayı kaybetmemenin tek yolu onu telefonda yazıya
+        dökmektir; bu model yalnız bunu yapar. Bağlantı gelince metin bilgisayarına gider ve notu yine orası yazdırır.
+      </p>
+      <p className="aciklama">
+        İnen dosya: açık kaynak Whisper konuşma tanıma modeli (whisper.cpp, <em>small</em>, 5 bit sıkıştırılmış,
+        ggml-small-q5_1), Hugging Face üzerinden bir kez. Not yazmaz, internete bir şey göndermez.
       </p>
       {m?.indiriliyor && <p className="deger">{mb(m.indirilen)} / {mb(m.boyut)} MB</p>}
       {m?.hata && <p className="hata">{m.hata}</p>}
       {!m?.hazir && !m?.indiriliyor && (
         <div className="satir-eylem">
           <button className="dugme" onClick={() => void hat.modelIndir()}>Modeli indir ({m ? mb(m.boyut) : 190} MB, Wi-Fi önerilir)</button>
+        </div>
+      )}
+      {m?.hazir && (
+        <div className="satir-eylem">
+          <button className="metin-dugme" onClick={() => void hat.modelSil()}>Modeli kaldır ({mb(m.boyut)} MB yer açılır)</button>
         </div>
       )}
     </div>

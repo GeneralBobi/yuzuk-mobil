@@ -29,6 +29,7 @@ export interface YuzukEklentisi {
   modelDurumu(): Promise<ModelDurumu>;
   modelIndir(): Promise<void>;
   modelSil(): Promise<void>;
+  kenarlariYenile(): Promise<void>;
   izinIste(): Promise<{ mikrofon: boolean }>;
   kayitBaslat(): Promise<{ yol: string }>;
   kayitDurdur(): Promise<{ yol: string | null; sureSn: number }>;
