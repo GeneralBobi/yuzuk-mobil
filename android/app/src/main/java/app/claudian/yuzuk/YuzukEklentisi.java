@@ -128,9 +128,14 @@ public class YuzukEklentisi extends Plugin {
             try { Thread.sleep(50); } catch (InterruptedException ignored) { }
         }
         JSObject r = new JSObject();
-        File f = yol != null ? new File(yol) : null;
-        r.put("yol", f != null && f.exists() && f.length() > 2000 ? yol : null);
+        // 0.11.5: kaydedici yeniden başladıysa birden çok parça vardır; tek dosyada birleşir.
+        String tam = yol != null ? KayitServisi.birlestir() : null;
+        File f = tam != null ? new File(tam) : null;
+        boolean var = f != null && f.exists() && f.length() > 2000;
+        r.put("yol", var ? tam : null);
         r.put("sureSn", bas > 0 ? (System.currentTimeMillis() - bas) / 1000 : 0);
+        r.put("sesSn", var ? KayitServisi.sesSuresiSn(tam) : 0);
+        r.put("kesinti", KayitServisi.kesinti);
         KayitServisi.yol = null;
         call.resolve(r);
     }

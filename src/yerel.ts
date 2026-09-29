@@ -32,7 +32,7 @@ export interface YuzukEklentisi {
   kenarlariYenile(): Promise<void>;
   izinIste(): Promise<{ mikrofon: boolean }>;
   kayitBaslat(): Promise<{ yol: string }>;
-  kayitDurdur(): Promise<{ yol: string | null; sureSn: number }>;
+  kayitDurdur(): Promise<{ yol: string | null; sureSn: number; sesSn?: number; kesinti?: number }>;
   kayitDurumu(): Promise<KayitDurumu>;
   dosyaSec(): Promise<{ yol: string | null; ad: string | null }>;
   dosyaVarMi(o: { yol: string }): Promise<{ var: boolean }>;

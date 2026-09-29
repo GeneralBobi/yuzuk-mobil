@@ -322,7 +322,7 @@ function OturumSatiri({ o }: { o: Oturum }) {
     <div>
       <button className="oturum" onClick={() => setAcik((a) => !a)} aria-expanded={acik}>
         <span className="oturum-ust">
-          <span className="mono">{saat(o.baslangic)}{o.sureSn ? ` · ${Math.max(1, Math.round(o.sureSn / 60))} dk` : ""}</span>
+          <span className="mono">{saat(o.baslangic)}{o.sureSn ? ` · ${o.sesSn && o.sesSn < o.sureSn - 60 ? `${Math.round(o.sesSn / 60)}/` : ""}${Math.max(1, Math.round(o.sureSn / 60))} dk` : ""}</span>
           <span className={`durum ${hataVar ? "hata-renk" : d === 3 && o.notAdi ? "kor" : d === 3 ? "soluk-renk" : ""}`}>{durumMetni}</span>
         </span>
         <span className="oturum-baslik" style={{ display: "block" }}>{ad}</span>

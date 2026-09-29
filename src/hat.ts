@@ -32,6 +32,7 @@ export interface Oturum {
   hata?: string;
   notAdi?: string;
   sureSn?: number;
+  sesSn?: number; // 0.11.5: dosyadaki sesin gerçek süresi; sureSn'den kısaysa kayıt arada durmuştur
   ozet?: string; // notun ilk başlıkları, listede gösterilir
   hatirlatici?: number; // telefonda kurulan hatırlatıcı sayısı
   kisi?: number; // ortamda konuşan kişi sayısı (ses izinden)
@@ -674,7 +675,7 @@ class Hat {
     this.kayitBaslangic = null;
     if (r.yol) {
       this.oturumlar.unshift({ id: String(bas), yol: r.yol, baslangic: new Date(bas).toISOString(), kaynak: "kayit",
-        durum: "yerel", sureSn: r.sureSn });
+        durum: "yerel", sureSn: r.sureSn, sesSn: r.sesSn || undefined });
       this.sakla();
       void this.ilerlet();
     } else {
