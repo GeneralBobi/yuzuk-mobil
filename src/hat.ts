@@ -165,12 +165,26 @@ class Hat {
     void this.ilerlet();
   }
 
+  vaultHatasi: string | null = null;
+
   async vaultSec() {
     const r = await yerel.klasorSec();
-    if (r.agac) {
-      this.ayarla({ vault: r.agac, vaultAdi: r.ad ?? "vault" });
-      await this.iskeletKur();
+    if (!r.agac) return;
+    // 0.11.1: yalnız vault kökü (.obsidian olan klasör) seçilebilir; alt klasör seçimi eşitlemede vault'u çoğaltmıştı.
+    if (r.obsidian === false) {
+      this.vaultHatasi = `"${r.ad ?? "Bu klasör"}" bir Obsidian vault'u değil. Vault'un kendisini seç.`;
+      this.yayinla();
+      return;
     }
+    this.vaultHatasi = null;
+    if (r.agac !== this.ayarlar.vault) {
+      // Kök değişti: eski izler başka yollara aitti.
+      localStorage.removeItem("esitleme-izi");
+      this.esitleme = { durum: "yok", metin: "" };
+      localStorage.setItem("esitleme", JSON.stringify(this.esitleme));
+    }
+    this.ayarla({ vault: r.agac, vaultAdi: r.ad ?? "vault" });
+    await this.iskeletKur();
   }
 
   // ---------------- vault eşitleme (telefon ↔ bilgisayar, bulut üzerinden) ----------------
@@ -202,12 +216,17 @@ class Hat {
       localStorage.setItem("esitleme", JSON.stringify(this.esitleme));
       this.yayinla();
     };
+    if (!(await yerel.vaultMi({ agac }).catch(() => ({ obsidian: false }))).obsidian) {
+      guncelle({ durum: "hata", metin: "Seçili klasör vault'un kökü değil. Obsidian vault'u → Değiştir." });
+      return;
+    }
     guncelle({ durum: "calisiyor", metin: "Bilgisayardaki notlar okunuyor…" });
     const kok = `${this.ayarlar.sunucu}/v1/vault`;
+    const surum = "surum=2"; // 0.11.1: bulut eşitlemeyi yalnız kökü denetleyen sürüme açar
     const iz: Record<string, string> = oku("esitleme-izi", {});
     const yeniIz: Record<string, string> = {};
     try {
-      const r = await fetch(`${kok}/liste`, { headers: this.basliklar });
+      const r = await fetch(`${kok}/liste?${surum}`, { headers: this.basliklar });
       if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { detail?: string }).detail ?? `Bulut ${r.status}`);
       const pc = new Map(((await r.json()).dosyalar as { yol: string; sha: string; mtime: number }[]).map((d) => [d.yol, d]));
       guncelle({ metin: "Telefondaki notlar okunuyor…" });
@@ -216,15 +235,21 @@ class Hat {
         const icerik = (await yerel.vaultOku({ agac, yol: d.yol })).icerik;
         tel.set(d.yol, { ...d, icerik, sha: await this.sha(icerik) });
       }
-      const say = { indirilen: 0, gonderilen: 0, cakisma: 0, ayni: 0 };
+      const say = { indirilen: 0, gonderilen: 0, cakisma: 0, ayni: 0, temizlenen: 0, atlanan: 0 };
+      // 0.11.1: yanlış köke (Yüzük alt klasörüne) inmiş vault kopyaları. Telefonda "Yüzük/X" olup bilgisayarda "X"
+      // olarak duran dosya bir kopyadır: bilgisayara gönderilmez; içeriği aynıysa telefondan silinir.
+      const alt = (this.ayarlar.altKlasor || "Yüzük") + "/";
+      const pcIzleri = new Set([...pc.values()].map((d) => d.sha));
+      const kopyaMi = (yol: string, sha: string) =>
+        (yol.startsWith(alt) && pc.has(yol.slice(alt.length))) || pcIzleri.has(sha);
       const indir = async (yol: string) => {
-        const g = await fetch(`${kok}/dosya?yol=${encodeURIComponent(yol)}`, { headers: this.basliklar });
+        const g = await fetch(`${kok}/dosya?yol=${encodeURIComponent(yol)}&${surum}`, { headers: this.basliklar });
         if (!g.ok) throw new Error(`${yol} alınamadı (${g.status})`);
         await yerel.dosyaYaz({ agac, yol, icerik: await g.text(), ekle: false });
         say.indirilen++;
       };
       const gonder = async (yol: string, icerik: string, yedek = false) => {
-        const p = await fetch(`${kok}/dosya?yol=${encodeURIComponent(yol)}${yedek ? "&yedek=1" : ""}`, {
+        const p = await fetch(`${kok}/dosya?yol=${encodeURIComponent(yol)}&${surum}${yedek ? "&yedek=1" : ""}`, {
           method: "PUT", headers: { ...this.basliklar, "Content-Type": "text/markdown; charset=utf-8" }, body: icerik });
         if (!p.ok) throw new Error(`${yol} gönderilemedi (${p.status})`);
         if (!yedek) say.gonderilen++;
@@ -234,6 +259,14 @@ class Hat {
         guncelle({ metin: `Eşitleniyor · ${i + 1}/${yollar.length}` });
         const p = pc.get(yol), t = tel.get(yol);
         if (p && !t) { await indir(yol); yeniIz[yol] = p.sha; continue; }
+        if (t && !p && kopyaMi(yol, t.sha)) {
+          const asil = pc.get(yol.startsWith(alt) ? yol.slice(alt.length) : "");
+          if (asil && asil.sha === t.sha) { // yalnız yanlış köke inmiş birebir kopya silinir
+            await yerel.vaultSil({ agac, yol }).catch(() => undefined);
+            say.temizlenen++;
+          } else say.atlanan++;
+          continue;
+        }
         if (t && !p) { await gonder(yol, t.icerik); yeniIz[yol] = t.sha; continue; }
         if (!p || !t) continue;
         if (p.sha === t.sha) { say.ayni++; yeniIz[yol] = p.sha; continue; }
@@ -249,7 +282,8 @@ class Hat {
       localStorage.setItem("esitleme-izi", JSON.stringify(yeniIz));
       const enYeni = (m: Map<string, { mtime: number }>) => Math.max(0, ...[...m.values()].map((d) => d.mtime));
       guncelle({ durum: "bitti", son: new Date().toISOString(),
-        metin: say.indirilen + say.gonderilen ? `${say.indirilen} not bilgisayardan geldi, ${say.gonderilen} not bilgisayara gitti.` : "İki taraf zaten aynı.",
+        metin: [say.indirilen + say.gonderilen ? `${say.indirilen} geldi, ${say.gonderilen} gitti.` : "İki taraf aynı.",
+          say.temizlenen ? `${say.temizlenen} kopya silindi.` : "", say.atlanan ? `${say.atlanan} kopya gönderilmedi.` : ""].filter(Boolean).join(" "),
         ozet: { pc: pc.size, tel: tel.size, pcEnYeni: enYeni(pc), telEnYeni: enYeni(tel), ...say } });
     } catch (e) {
       localStorage.setItem("esitleme-izi", JSON.stringify({ ...iz, ...yeniIz }));

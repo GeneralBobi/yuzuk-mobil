@@ -451,11 +451,50 @@ public class YuzukEklentisi extends Plugin {
             DocumentFile d = DocumentFile.fromTreeUri(getContext(), uri);
             r.put("agac", uri.toString());
             r.put("ad", d != null ? d.getName() : null);
+            // 0.11.1: vault kökü içinde .obsidian klasörü olandır; alt klasör seçilirse eşitleme vault'u onun içine çoğaltır.
+            r.put("obsidian", d != null && obsidianVar(d));
         } else {
             r.put("agac", null);
             r.put("ad", null);
         }
         call.resolve(r);
+    }
+
+    private static boolean obsidianVar(DocumentFile kok) {
+        DocumentFile o = kok.findFile(".obsidian");
+        return o != null && o.isDirectory();
+    }
+
+    /** 0.11.1: seçili klasör bir Obsidian vault'unun kökü mü (.obsidian klasörü var mı). */
+    @PluginMethod
+    public void vaultMi(PluginCall call) {
+        new Thread(() -> {
+            DocumentFile kok = DocumentFile.fromTreeUri(getContext(), Uri.parse(call.getString("agac", "")));
+            call.resolve(sonuc("obsidian", kok != null && kok.canRead() && obsidianVar(kok)));
+        }).start();
+    }
+
+    /** 0.11.1: eşitlemenin yanlış köke indirdiği kopyayı siler; boşalan klasörler de kalkar (vault kökü kalır). */
+    @PluginMethod
+    public void vaultSil(PluginCall call) {
+        new Thread(() -> {
+            try {
+                DocumentFile kok = DocumentFile.fromTreeUri(getContext(), Uri.parse(call.getString("agac")));
+                String[] parcalar = call.getString("yol").split("/");
+                java.util.ArrayList<DocumentFile> zincir = new java.util.ArrayList<>();
+                DocumentFile dizin = kok;
+                for (int i = 0; i < parcalar.length - 1 && dizin != null; i++) { dizin = dizin.findFile(parcalar[i]); zincir.add(dizin); }
+                DocumentFile f = dizin != null ? dizin.findFile(parcalar[parcalar.length - 1]) : null;
+                boolean silindi = f != null && f.isFile() && f.delete();
+                for (int i = zincir.size() - 1; i >= 0; i--) {
+                    DocumentFile d = zincir.get(i);
+                    if (d == null || d.listFiles().length > 0 || !d.delete()) break;
+                }
+                call.resolve(sonuc("silindi", silindi));
+            } catch (Exception e) {
+                call.reject(e.getMessage() != null ? e.getMessage() : e.toString());
+            }
+        }).start();
     }
 
     /** yol: "Yüzük/2026-09-23 1300 Başlık.md" — ara klasörler yoksa açılır. ekle=true ise sona eklenir. */

@@ -38,7 +38,11 @@ export interface YuzukEklentisi {
   dosyaVarMi(o: { yol: string }): Promise<{ var: boolean }>;
   dosyaSil(o: { yol: string }): Promise<void>;
   yukle(o: { yol: string; url: string; anahtar: string; alanlar: Record<string, string> }): Promise<{ durum: number; govde: string }>;
-  klasorSec(): Promise<{ agac: string | null; ad: string | null }>;
+  klasorSec(): Promise<{ agac: string | null; ad: string | null; obsidian?: boolean }>;
+  /** 0.11.1: seçili klasör vault kökü mü (.obsidian var mı). */
+  vaultMi(o: { agac: string }): Promise<{ obsidian: boolean }>;
+  /** 0.11.1: yanlış köke inmiş kopyayı siler; boşalan klasörler de kalkar. */
+  vaultSil(o: { agac: string; yol: string }): Promise<{ silindi: boolean }>;
   dosyaYaz(o: { agac: string; yol: string; icerik: string; ekle: boolean; yoksa?: boolean }): Promise<{ ad: string; vardi?: boolean }>;
   bildir(o: { baslik: string; metin: string }): Promise<void>;
   hatirlaticiKur(o: { id: string; zamanMs: number; baslik: string; metin: string }): Promise<{ kuruldu: boolean }>;

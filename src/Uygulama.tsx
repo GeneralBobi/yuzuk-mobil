@@ -402,6 +402,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
             : null}
           <div className="satir-eylem">
             <button className={a.vault ? "metin-dugme kor" : "dugme birincil"} onClick={() => void hat.vaultSec()}>{a.vault ? "Değiştir" : "Klasörü seç"}</button>
+            {hat.vaultHatasi && <p className="hata">{hat.vaultHatasi}</p>}
           </div>
         </div>
 
