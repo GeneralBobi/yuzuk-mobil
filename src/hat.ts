@@ -133,7 +133,6 @@ class Hat {
   }
 
   async baslat() {
-    void this.modelYukle();
     const c = await yerel.canliDurumu().catch(() => null);
     if (c?.calisiyor) {
       this.kaydediyor = true;
@@ -147,6 +146,8 @@ class Hat {
       this.kayitBaslangic = d.baslangicMs;
       this.seviyeIzle();
     }
+    // 0.11.0: çevrimdışı telefon modeli kalktı (ses dosyası kaldığı için gereksiz); 0.10'da indirildiyse yer açılır.
+    void yerel.modelSil().catch(() => undefined);
     // Uygulama kapanırken "gönderiliyor"da kalan oturum yeniden gönderilir.
     for (const o of this.oturumlar) if (o.durum === "gonderiliyor") o.durum = "yerel";
     this.sakla();
@@ -568,15 +569,15 @@ class Hat {
       this.yayinla();
       return;
     }
+    // 0.11.0 (29.09.2026, Boran'ın A kararı): not kaydı yine ses dosyasıdır. Ses, not Obsidian'a yazılana kadar
+    // telefonda durur, sonra silinir; bağlantı kopsa da kayıt kaybolmaz. Canlı parça yolu yeni kayıt başlatmaz.
     try {
-      await yerel.canliBaslat({ sunucu: this.ayarlar.sunucu, anahtar: this.ayarlar.anahtar });
-      const d = await yerel.canliDurumu();
+      await yerel.kayitBaslat();
+      const d = await yerel.kayitDurumu();
       if (!d.calisiyor) throw new Error(d.hata ?? "bilinmeyen hata");
       this.kaydediyor = true;
       this.kayitBaslangic = d.baslangicMs;
-      this.canli = d;
       this.seviyeIzle();
-      if (!this.model?.hazir) this.uyari = "Çevrimdışı yazıya dökme kurulu değil: bağlantı koparsa parçalar bellekte bekler. Ayarlar'dan modeli indir.";
     } catch (e) {
       this.uyari = `Kayıt başlamadı: ${(e as Error).message}`;
     }
@@ -606,8 +607,7 @@ class Hat {
         this.seviye = 0;
         return;
       }
-      const d = this.kaydediyor ? await yerel.canliDurumu().catch(() => null) : await yerel.kayitDurumu().catch(() => null);
-      if (this.kaydediyor && d) this.canli = d as CanliDurum;
+      const d = await yerel.kayitDurumu().catch(() => null);
       this.seviye = d?.seviye ?? 0;
       this.okuma++;
       this.yayinla();
@@ -617,13 +617,13 @@ class Hat {
   }
 
   async kayitDurdur() {
-    const r = await yerel.canliDurdur();
+    const r = await yerel.kayitDurdur();
     const bas = this.kayitBaslangic ?? Date.now();
     this.kaydediyor = false;
     this.kayitBaslangic = null;
-    if (r.dokum) {
-      this.oturumlar.unshift({ id: String(bas), yol: r.dokum, baslangic: new Date(bas).toISOString(), kaynak: "canli",
-        durum: "yerel", sureSn: r.sureSn, asama: "Son parçalar metne çevriliyor" });
+    if (r.yol) {
+      this.oturumlar.unshift({ id: String(bas), yol: r.yol, baslangic: new Date(bas).toISOString(), kaynak: "kayit",
+        durum: "yerel", sureSn: r.sureSn });
       this.sakla();
       void this.ilerlet();
     } else {

@@ -449,7 +449,6 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
           </div>
         )}
 
-        <CevrimdisiModel />
 
         <div className="satir">
           <div className="satir-bas">
@@ -528,7 +527,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
       </details>
 
       <p className="dipnot">
-        Kayıtta ses dosyası oluşmaz; konuşma parça parça metne çevrilir ve yalnız metin, not yazılana kadar telefonda durur.
+        Ses yalnız not yazılana kadar telefonda durur, sonra silinir; bulutta saklanmaz.
         Ses izin yalnız bilgisayarında durur. Başkalarının özel bilgisi nota yazılmaz.{" "}
         <a href="https://claudian.app/yuzuk/gizlilik" target="_blank" rel="noopener noreferrer">Gizlilik politikası</a>
       </p>
@@ -540,32 +539,6 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
 
 const EN_AZ_SN = 15;
 const HEDEF_SN = 25;
-
-function CevrimdisiModel() {
-  const m = hat.model;
-  const mb = (b: number) => Math.round(b / 1e6);
-  return (
-    <div className="satir">
-      <div className="satir-bas">
-        <h2>Çevrimdışı yazıya dökme</h2>
-        <span className={`etiket ${m?.hazir ? "" : "soluk"}`}>{m?.hazir ? "kurulu" : m?.indiriliyor ? "iniyor" : "kurulu değil"}</span>
-      </div>
-      <p className="aciklama">Bağlantı yokken telefonda yazıya döker · Whisper small</p>
-      {m?.indiriliyor && <p className="deger">{mb(m.indirilen)} / {mb(m.boyut)} MB</p>}
-      {m?.hata && <p className="hata">{m.hata}</p>}
-      {!m?.hazir && !m?.indiriliyor && (
-        <div className="satir-eylem">
-          <button className="dugme" onClick={() => void hat.modelIndir()}>Modeli indir ({m ? mb(m.boyut) : 190} MB, Wi-Fi önerilir)</button>
-        </div>
-      )}
-      {m?.hazir && (
-        <div className="satir-eylem">
-          <button className="metin-dugme" onClick={() => void hat.modelSil()}>Modeli kaldır ({mb(m.boyut)} MB yer açılır)</button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function SesiniTanit({ kapat }: { kapat: () => void }) {
   useSaniye(hat.sesKaydi === "kayitta");

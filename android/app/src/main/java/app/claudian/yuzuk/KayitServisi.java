@@ -13,8 +13,9 @@ import android.os.Build;
 import android.os.IBinder;
 
 /**
- * Yalnız "Sesini tanıt" için: kullanıcı kendi sesini ~25 sn okur, ses izi çıkarılınca dosya silinir.
- * Not alma kaydı bu servisi kullanmaz (27.09.2026): CanliKayitServisi ses dosyası oluşturmadan çalışır.
+ * Ekran kilitliyken de süren kayıt (not alma ve "Sesini tanıt"). Android mikrofonu arka planda yalnız görünür bir ön plan
+ * servisine verir. Ses uygulamanın kendi klasörüne yazılır; not Obsidian'a yazılınca (ya da ses izi çıkarılınca) silinir.
+ * 0.11.0 (29.09.2026): not kaydı yeniden bu servisle — bağlantı kopsa da kayıt telefonda bekler (Boran'ın A kararı).
  */
 public class KayitServisi extends Service {
     static final String KANAL = "kayit";
