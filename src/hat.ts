@@ -222,20 +222,23 @@ class Hat {
     }
     guncelle({ durum: "calisiyor", metin: "Bilgisayardaki notlar okunuyor…" });
     const kok = `${this.ayarlar.sunucu}/v1/vault`;
-    const surum = "surum=2"; // 0.11.1: bulut eşitlemeyi yalnız kökü denetleyen sürüme açar
+    const surum = "surum=3"; // 0.11.2: bulut eşitlemeyi yalnız kökü denetleyen ve silmeyi taşıyan sürüme açar
     const iz: Record<string, string> = oku("esitleme-izi", {});
     const yeniIz: Record<string, string> = {};
     try {
       const r = await fetch(`${kok}/liste?${surum}`, { headers: this.basliklar });
       if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { detail?: string }).detail ?? `Bulut ${r.status}`);
-      const pc = new Map(((await r.json()).dosyalar as { yol: string; sha: string; mtime: number }[]).map((d) => [d.yol, d]));
+      const liste = (await r.json()) as { dosyalar: { yol: string; sha: string; mtime: number }[]; silinen?: string[] };
+      const pc = new Map(liste.dosyalar.map((d) => [d.yol, d]));
+      // 0.11.2: bilgisayarda silinen (ya da çöpe atılan) yol telefonda duruyorsa geri yüklenmez, telefondan da silinir.
+      const silinen = new Set(liste.silinen ?? []);
       guncelle({ metin: "Telefondaki notlar okunuyor…" });
       const tel = new Map<string, { yol: string; mtime: number; sha: string; icerik: string }>();
       for (const d of (await yerel.vaultListe({ agac })).dosyalar) {
         const icerik = (await yerel.vaultOku({ agac, yol: d.yol })).icerik;
         tel.set(d.yol, { ...d, icerik, sha: await this.sha(icerik) });
       }
-      const say = { indirilen: 0, gonderilen: 0, cakisma: 0, ayni: 0, temizlenen: 0, atlanan: 0 };
+      const say = { indirilen: 0, gonderilen: 0, cakisma: 0, ayni: 0, temizlenen: 0, atlanan: 0, silinen: 0 };
       // 0.11.1: yanlış köke (Yüzük alt klasörüne) inmiş vault kopyaları. Telefonda "Yüzük/X" olup bilgisayarda "X"
       // olarak duran dosya bir kopyadır: bilgisayara gönderilmez; içeriği aynıysa telefondan silinir.
       const alt = (this.ayarlar.altKlasor || "Yüzük") + "/";
@@ -259,6 +262,11 @@ class Hat {
         guncelle({ metin: `Eşitleniyor · ${i + 1}/${yollar.length}` });
         const p = pc.get(yol), t = tel.get(yol);
         if (p && !t) { await indir(yol); yeniIz[yol] = p.sha; continue; }
+        if (t && !p && silinen.has(yol)) {
+          await yerel.vaultSil({ agac, yol }).catch(() => undefined);
+          say.silinen++;
+          continue;
+        }
         if (t && !p && kopyaMi(yol, t.sha)) {
           const asil = pc.get(yol.startsWith(alt) ? yol.slice(alt.length) : "");
           if (asil && asil.sha === t.sha) { // yalnız yanlış köke inmiş birebir kopya silinir
@@ -270,8 +278,12 @@ class Hat {
         if (t && !p) { await gonder(yol, t.icerik); yeniIz[yol] = t.sha; continue; }
         if (!p || !t) continue;
         if (p.sha === t.sha) { say.ayni++; yeniIz[yol] = p.sha; continue; }
+        // 0.11.2: bu yol bu vault'la hiç eşitlenmediyse bilgisayar kazanır, telefon sürümü bilgisayarda yedeğe girer.
+        // Tarih güvenilmez: telefona yeni inmiş dosyanın tarihi "şimdi"dir (29.09'da iki not eski sürümle ezilmişti).
+        const ilk = iz[yol] === undefined;
         const pcDegisti = p.sha !== iz[yol], telDegisti = t.sha !== iz[yol];
-        if (pcDegisti && !telDegisti) { await indir(yol); yeniIz[yol] = p.sha; }
+        if (ilk) { say.cakisma++; await gonder(yol, t.icerik, true); await indir(yol); yeniIz[yol] = p.sha; }
+        else if (pcDegisti && !telDegisti) { await indir(yol); yeniIz[yol] = p.sha; }
         else if (telDegisti && !pcDegisti) { await gonder(yol, t.icerik); yeniIz[yol] = t.sha; }
         else {
           say.cakisma++;
@@ -283,7 +295,8 @@ class Hat {
       const enYeni = (m: Map<string, { mtime: number }>) => Math.max(0, ...[...m.values()].map((d) => d.mtime));
       guncelle({ durum: "bitti", son: new Date().toISOString(),
         metin: [say.indirilen + say.gonderilen ? `${say.indirilen} geldi, ${say.gonderilen} gitti.` : "İki taraf aynı.",
-          say.temizlenen ? `${say.temizlenen} kopya silindi.` : "", say.atlanan ? `${say.atlanan} kopya gönderilmedi.` : ""].filter(Boolean).join(" "),
+          say.silinen ? `${say.silinen} silindi.` : "", say.temizlenen ? `${say.temizlenen} kopya silindi.` : "",
+          say.atlanan ? `${say.atlanan} kopya gönderilmedi.` : ""].filter(Boolean).join(" "),
         ozet: { pc: pc.size, tel: tel.size, pcEnYeni: enYeni(pc), telEnYeni: enYeni(tel), ...say } });
     } catch (e) {
       localStorage.setItem("esitleme-izi", JSON.stringify({ ...iz, ...yeniIz }));
