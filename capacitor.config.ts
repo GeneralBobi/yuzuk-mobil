@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "app.claudian.yuzuk",
-  appName: "Claudian",
+  appName: "Yüzük",
   webDir: "dist",
   android: { backgroundColor: "#0e0e10" },
   plugins: {

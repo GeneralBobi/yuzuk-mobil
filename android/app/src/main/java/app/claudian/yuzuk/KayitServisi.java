@@ -52,7 +52,7 @@ public class KayitServisi extends Service {
         PendingIntent ac = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification bildirim = new Notification.Builder(this, KANAL)
-                .setContentTitle("Claudian dinliyor")
+                .setContentTitle("Yüzük dinliyor")
                 .setContentText("Not almak için kayıt sürüyor. Durdurmak için uygulamaya dön.")
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .setOngoing(true)

@@ -469,8 +469,8 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
         <div className="satir">
           <h2>Notu yazan</h2>
           <div className="secim" role="radiogroup" aria-label="Notu yazan AI">
-            {Object.entries(YAZICILAR).filter(([id]) => id !== "gemini").map(([id, ad]) => {
-              // 1.5.0: Claude bulutta, ChatGPT bilgisayarda (Codex, bütün araçları kapalı) yazar; ikisi de araçsız.
+            {Object.entries(YAZICILAR).map(([id, ad]) => {
+              // 1.6.0: Claude bulutta; ChatGPT (Codex) ve Gemini (Antigravity) bilgisayarda, bütün araçları kapalı yazar.
               // Bilgisayarda kurulu olmayan yazıcı seçilemez.
               const kurulu = !hat.kuruluYazicilar || hat.kuruluYazicilar.includes(id);
               return (
@@ -527,8 +527,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
       </details>
 
       <p className="dipnot">
-        Ses yalnız not yazılana kadar telefonda durur, sonra silinir; bulutta saklanmaz.
-        Ses izin yalnız bilgisayarında durur. Başkalarının özel bilgisi nota yazılmaz.{" "}
+        Ses, not yazılınca silinir.{" "}
         <a href="https://claudian.app/yuzuk/gizlilik" target="_blank" rel="noopener noreferrer">Gizlilik politikası</a>
       </p>
     </section>

@@ -43,6 +43,8 @@ export interface YuzukEklentisi {
   bildir(o: { baslik: string; metin: string }): Promise<void>;
   hatirlaticiKur(o: { id: string; zamanMs: number; baslik: string; metin: string }): Promise<{ kuruldu: boolean }>;
   hatirlaticiSayisi(): Promise<{ sayi: number }>;
+  /** 1.6.0: SHA-256("yuzuk:" + ANDROID_ID); aynı telefon yeniden eşleşince eski satırı iptal olur. */
+  cihazIzi(): Promise<{ izi?: string }>;
   hatirlaticiEsitle(o: { liste: { id: string; zamanMs: number; bugun: boolean; baslik: string; metin: string }[] }): Promise<{ kurulan: number }>;
   /** 1.5.0: bildirimdeki "Yaptım / Yarın tekrar" uygulama açılmadan gidebilsin diye bulut adresi ve cihaz anahtarı. */
   hatirlaticiBaglanti(o: { sunucu: string; anahtar: string }): Promise<void>;
@@ -55,7 +57,7 @@ export interface YuzukEklentisi {
   addListener(olay: "paylasim", dinleyici: (p: Paylasim) => void): Promise<{ remove: () => Promise<void> }>;
 }
 
-/** Başka uygulamadan "Paylaş → Claudian" ile gelen dosya (uygulamanın klasörüne kopyalanmış). */
+/** Başka uygulamadan "Paylaş → Yüzük" ile gelen dosya (uygulamanın klasörüne kopyalanmış). */
 export interface Paylasim {
   yol?: string;
   ad?: string | null;

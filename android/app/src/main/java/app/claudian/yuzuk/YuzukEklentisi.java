@@ -10,6 +10,7 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.OpenableColumns;
+import android.provider.Settings;
 
 import androidx.activity.result.ActivityResult;
 import androidx.documentfile.provider.DocumentFile;
@@ -36,6 +37,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Iterator;
 import java.util.UUID;
 
@@ -301,7 +303,7 @@ public class YuzukEklentisi extends Plugin {
 
     // ------------------------------------------------ başka uygulamadan paylaşım
 
-    /** WhatsApp sesli mesajı, ses kaydedici, video: "Paylaş → Claudian" ile gelen dosya not olur. */
+    /** WhatsApp sesli mesajı, ses kaydedici, video: "Paylaş → Yüzük" ile gelen dosya not olur. */
     private JSObject bekleyenPaylasim = null;
 
     @Override
@@ -560,7 +562,7 @@ public class YuzukEklentisi extends Plugin {
         }
         String metin = call.getString("metin", "");
         Notification n = new Notification.Builder(getContext(), "not")
-                .setContentTitle(call.getString("baslik", "Claudian"))
+                .setContentTitle(call.getString("baslik", "Yüzük"))
                 .setContentText(metin)
                 .setStyle(new Notification.BigTextStyle().bigText(metin))
                 .setSmallIcon(android.R.drawable.ic_menu_edit)
@@ -578,7 +580,7 @@ public class YuzukEklentisi extends Plugin {
         try {
             long zaman = call.getLong("zamanMs", 0L);
             if (zaman <= System.currentTimeMillis()) { call.resolve(sonuc("kuruldu", false)); return; }
-            HatirlaticiAlici.kur(getContext(), call.getString("id"), zaman, call.getString("baslik", "Claudian"), call.getString("metin", ""));
+            HatirlaticiAlici.kur(getContext(), call.getString("id"), zaman, call.getString("baslik", "Yüzük"), call.getString("metin", ""));
             call.resolve(sonuc("kuruldu", true));
         } catch (Exception e) {
             call.reject(e.getMessage() != null ? e.getMessage() : e.toString());
@@ -611,6 +613,22 @@ public class YuzukEklentisi extends Plugin {
             call.resolve(r);
         } catch (Exception e) {
             call.reject(e.getMessage() != null ? e.getMessage() : e.toString());
+        }
+    }
+
+    /** 1.6.0: eşleşmede gönderilen cihaz izi. ANDROID_ID uygulamanın imza anahtarına bağlıdır, kaldırıp kurunca
+     *  değişmez; buluta ham hâli değil "yuzuk:" önekli SHA-256'sı gider. Aynı telefonun eski satırı böylece iptal olur. */
+    @PluginMethod
+    public void cihazIzi(PluginCall call) {
+        try {
+            String id = Settings.Secure.getString(getContext().getContentResolver(), Settings.Secure.ANDROID_ID);
+            if (id == null || id.isEmpty()) { call.resolve(new JSObject()); return; }
+            byte[] o = MessageDigest.getInstance("SHA-256").digest(("yuzuk:" + id).getBytes(StandardCharsets.UTF_8));
+            StringBuilder h = new StringBuilder();
+            for (byte b : o) h.append(String.format("%02x", b));
+            call.resolve(sonuc("izi", h.toString()));
+        } catch (Exception e) {
+            call.resolve(new JSObject());
         }
     }
 

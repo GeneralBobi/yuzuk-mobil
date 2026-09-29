@@ -24,7 +24,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Başka uygulamadan "Paylaş → Claudian": sesli mesaj, ses kaydı ya da video not olur -->
+            <!-- Başka uygulamadan "Paylaş → Yüzük": sesli mesaj, ses kaydı ya da video not olur -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

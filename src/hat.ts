@@ -302,10 +302,11 @@ class Hat {
     this.eslestirme = { durum: "bekliyor", metin: "Eşleştiriliyor…" };
     this.yayinla();
     try {
+      const izi = (await yerel.cihazIzi().catch(() => ({} as { izi?: string }))).izi;
       const r = await fetch(`${this.ayarlar.sunucu || VARSAYILAN_SUNUCU}/v1/eslestir`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kod: temiz, ad: "Android telefon" }),
+        body: JSON.stringify({ kod: temiz, ad: "Android telefon", ...(izi ? { izi } : {}) }),
       });
       if (r.status === 403) throw new Error("Kod geçersiz ya da kullanılmış");
       if (!r.ok) throw new Error(`Sunucu ${r.status}`);
@@ -318,7 +319,7 @@ class Hat {
           if (o.durum === "yerel" || o.durum === "gonderiliyor" || o.durum === "sunucuda") {
             o.durum = "hata";
             o.sunucuId = undefined;
-            o.hata = "Hesap değişti: bu kayıt önceki eşleşmeye aitti. Yeni hesaba göndermek için Tekrar dene'ye bas ya da sil.";
+            o.hata = "Önceki hesabın kaydı.";
           }
         }
       }
@@ -341,15 +342,15 @@ class Hat {
     if (!this.ayarlar.anahtar) return sonuc("bilinmiyor", "");
     try {
       const r = await fetch(`${this.ayarlar.sunucu}/v1/saglik`, { headers: this.basliklar });
-      if (r.status === 401) return sonuc("anahtar", "Bu telefonun anahtarı artık geçmiyor. Masaüstünden yeniden eşleştir.");
-      if (r.status === 503) return sonuc("kapali", ((await r.json().catch(() => ({}))) as { detail?: string }).detail ?? "İşlem düğümü çevrim dışı. Kayıtlar telefonda bekler.");
+      if (r.status === 401) return sonuc("anahtar", "Yeniden eşleştir.");
+      if (r.status === 503) return sonuc("kapali", ((await r.json().catch(() => ({}))) as { detail?: string }).detail ?? "Bilgisayar çevrim dışı. Kayıtlar telefonda.");
       if (!r.ok) return sonuc("kapali", `Bulut ${r.status} döndü. Kayıtlar telefonda bekler.`);
       const j = await r.json();
       this.kuruluYazicilar = Object.keys(j.yazicilar ?? {});
       if (typeof j.profil === "boolean" && !this.sesIzi) this.sesIzi = { var: j.profil };
       return sonuc("bagli", j.konusmaci ? "Bağlı · konuşmacılar ayrılıyor" : "Bağlı");
     } catch {
-      return sonuc("kapali", "Buluta ulaşılamadı. İnternet yok gibi; kayıtlar telefonda bekler.");
+      return sonuc("kapali", "İnternet yok. Kayıtlar telefonda.");
     }
   }
 
@@ -396,7 +397,7 @@ class Hat {
       const r = await fetch(`${this.ayarlar.sunucu}/v1/hatirlaticilar`, { headers: this.basliklar });
       if (!r.ok) {
         const neden = ((await r.json().catch(() => ({}))) as { detail?: string }).detail;
-        guncelle({ metin: r.status === 404 ? "Bilgisayardaki Claudian bu özelliği henüz tanımıyor; güncellenince hatırlatıcılar gelir."
+        guncelle({ metin: r.status === 404 ? "Bilgisayardaki Claudian eski."
           : `${neden ?? `Bulut ${r.status}`} Kurulu hatırlatıcılar olduğu gibi duruyor.` });
         return;
       }
@@ -464,7 +465,7 @@ class Hat {
       const j = (await r.json().catch(() => ({}))) as { detail?: string; ses_izi?: string };
       if (!r.ok) throw new Error(j.detail ?? `Bulut ${r.status} döndü; hesap silinmedi.`);
       const ses = j.ses_izi === "bilgisayara ulaşılamadı"
-        ? " Bilgisayarın kapalı olduğu için oradaki ses izin silinemedi: bilgisayarında Claudian → Yüzük → Ses izini sil."
+        ? " Bilgisayardaki ses izi silinemedi (kapalı)."
         : "";
       this.hesap = null;
       this.ayarla({ anahtar: "" });
@@ -565,7 +566,7 @@ class Hat {
     if (this.sesKaydi !== "yok") return;
     const izin = await yerel.izinIste();
     if (!izin.mikrofon) {
-      this.uyari = "Mikrofon izni verilmedi. Android ayarlarından Claudian'a mikrofon izni ver.";
+      this.uyari = "Mikrofon izni yok.";
       this.yayinla();
       return;
     }
@@ -905,10 +906,10 @@ class Hat {
 export function baglantiHatasi(ham: string): string {
   const m = ham.toLowerCase();
   if (/connection abort|connection reset|broken pipe|unexpected end of stream|socket closed/.test(m))
-    return "bağlantı gönderim sırasında koptu. Kayıt telefonda duruyor; bağlantı gelince kendiliğinden yeniden gönderilecek.";
+    return "bağlantı koptu. Kayıt telefonda.";
   if (/timeout|timed out/.test(m)) return "bağlantı çok yavaş. Kayıt telefonda duruyor; yeniden denenecek.";
   if (/unable to resolve host|failed to connect|network is unreachable|no route/.test(m))
-    return "internet yok. Kayıt telefonda duruyor; bağlantı gelince gönderilecek.";
+    return "internet yok. Kayıt telefonda.";
   return ham;
 }
 
