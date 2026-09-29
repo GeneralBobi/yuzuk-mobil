@@ -840,9 +840,11 @@ class Hat {
       const j = await r.json();
       if (j.durum === "hazir") {
         if (j.sonuc?.not_md?.trim() && j.sonuc.pc_notu) {
-          // 1.5.0: not bilgisayarın vault'una yazıldı (aynı ad, aynı klasör); telefon ikinci kopyayı yazmaz, vault
-          // eşitlemesiyle o not gelir. Tarihli işler bilgisayarın hatırlatıcı notundan düğmeli bildirim olarak kurulur.
+          // 1.5.0: not bilgisayarın vault'una yazıldı (aynı ad, aynı klasör). 0.11.3: telefon o notun aynısını (aynı yol,
+          // aynı içerik) bilgisayardan alıp kendi vault'una da yazar; eşitleme ikisini aynı görür, kopya oluşmaz.
+          // Tarihli işler bilgisayarın hatırlatıcı notundan düğmeli bildirim olarak kurulur.
           this.pcNotunuIsle(o, j.sonuc);
+          await this.pcNotunuTelefonaYaz(String(j.sonuc.pc_notu));
           void this.hatirlaticiCek();
         } else if (j.sonuc?.not_md?.trim()) {
           await this.obsidianaYaz(o, j.sonuc);
@@ -871,6 +873,25 @@ class Hat {
 
   // ---------------- Obsidian ----------------
 
+  /** 0.11.3: bilgisayarın yazdığı notun birebir kopyası telefondaki vault'a. Vault kökü seçili değilse ya da not
+   *  alınamazsa bir şey yazılmaz (farklı bir kopya yazmak eşitlemede çift not demektir); not eşitlemeyle gelir. */
+  private async pcNotunuTelefonaYaz(yol: string) {
+    const agac = this.ayarlar.vault;
+    if (!agac || !/^Yüzük\/[^/]+\.md$/.test(yol)) return;
+    try {
+      if (!(await yerel.vaultMi({ agac })).obsidian) return;
+      const r = await fetch(`${this.ayarlar.sunucu}/v1/vault/dosya?yol=${encodeURIComponent(yol)}&surum=3`, { headers: this.basliklar });
+      if (!r.ok) return;
+      const icerik = await r.text();
+      await yerel.dosyaYaz({ agac, yol, icerik, ekle: false });
+      const iz: Record<string, string> = oku("esitleme-izi", {});
+      iz[yol] = await this.sha(icerik);
+      localStorage.setItem("esitleme-izi", JSON.stringify(iz));
+    } catch {
+      /* not eşitlemeyle gelir */
+    }
+  }
+
   private pcNotunuIsle(o: Oturum, s: { baslik?: string; not_md?: string; pc_notu?: string; yazici?: string; mahrem?: number;
     konusmaci?: { sayi?: number; sen?: boolean; sureler?: Record<string, number> } }) {
     o.mahrem = s.mahrem || undefined;
@@ -887,7 +908,7 @@ class Hat {
     const ozetBasi = satirlar.findIndex((l) => /^#{2,4}\s*Özet/i.test(l));
     const ilk = ozetBasi >= 0 ? satirlar.slice(ozetBasi + 1).find((l) => l.trim() && !l.startsWith("#")) : undefined;
     o.ozet = ilk ? ilk.replace(/^[-*]\s*/, "").replace(/\*\*/g, "").split(/(?<=[.!?])\s/)[0].slice(0, 180) : undefined;
-    void yerel.bildir({ baslik: `Not hazır · ${o.baslik ?? "Not"}`, metin: "Bilgisayarın vault'una yazıldı." }).catch(() => undefined);
+    void yerel.bildir({ baslik: `Not hazır · ${o.baslik ?? "Not"}`, metin: "Obsidian'a yazıldı." }).catch(() => undefined);
   }
 
   private async obsidianaYaz(o: Oturum, s: { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: string; saat?: string; metin: string }[];
