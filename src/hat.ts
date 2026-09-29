@@ -11,6 +11,9 @@
 
 import { yerel, type CanliDurum, type ModelDurumu, type Paylasim } from "./yerel";
 import protokol from "./vault/protokol.md?raw";
+import { version as SURUM } from "../package.json";
+
+type NotGirdisi = { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: string; saat?: string; metin: string }[] };
 
 // Telefon yalnız bulutu bilir (24.09.2026): bulut işi hesabın işlem düğümüne yönlendirir.
 export const VARSAYILAN_SUNUCU = "https://yuzuk-api.claudian.app";
@@ -603,7 +606,7 @@ class Hat {
   }
 
   private get basliklar() {
-    return { Authorization: `Bearer ${this.ayarlar.anahtar}` };
+    return { Authorization: `Bearer ${this.ayarlar.anahtar}`, "X-Yuzuk-Surum": SURUM };
   }
 
   // ---------------- kayıt ----------------
@@ -844,8 +847,9 @@ class Hat {
           // aynı içerik) bilgisayardan alıp kendi vault'una da yazar; eşitleme ikisini aynı görür, kopya oluşmaz.
           // Tarihli işler bilgisayarın hatırlatıcı notundan düğmeli bildirim olarak kurulur.
           this.pcNotunuIsle(o, j.sonuc);
-          await this.pcNotunuTelefonaYaz(String(j.sonuc.pc_notu));
+          await this.pcNotunuTelefonaYaz(o, j.sonuc);
           void this.hatirlaticiCek();
+          void this.otoEsitle(0);
         } else if (j.sonuc?.not_md?.trim()) {
           await this.obsidianaYaz(o, j.sonuc);
         } else {
@@ -873,23 +877,65 @@ class Hat {
 
   // ---------------- Obsidian ----------------
 
-  /** 0.11.3: bilgisayarın yazdığı notun birebir kopyası telefondaki vault'a. Vault kökü seçili değilse ya da not
-   *  alınamazsa bir şey yazılmaz (farklı bir kopya yazmak eşitlemede çift not demektir); not eşitlemeyle gelir. */
-  private async pcNotunuTelefonaYaz(yol: string) {
+  /** 0.11.3: bilgisayarın yazdığı notun birebir kopyası telefondaki vault'a (aynı yol, aynı içerik).
+   *  0.11.4: kopya alınamazsa (vault kökü değil, bulut ya da bilgisayar cevap vermedi) telefon notu aynı adla kendisi
+   *  yazar; not her durumda telefonda görünür. Yol aynı olduğu için eşitlemede çift not oluşmaz: ilk eşitlemede
+   *  bilgisayarın sürümü gelir, telefonunki bilgisayarda yedeğe girer. 29.09.2026: 79 dakikalık kayıt yalnız
+   *  bilgisayarda kalmıştı. */
+  private async pcNotunuTelefonaYaz(o: Oturum, s: NotGirdisi & { pc_notu?: string }) {
     const agac = this.ayarlar.vault;
-    if (!agac || !/^Yüzük\/[^/]+\.md$/.test(yol)) return;
+    if (!agac) return;
+    const yol = String(s.pc_notu);
     try {
-      if (!(await yerel.vaultMi({ agac })).obsidian) return;
-      const r = await fetch(`${this.ayarlar.sunucu}/v1/vault/dosya?yol=${encodeURIComponent(yol)}&surum=3`, { headers: this.basliklar });
-      if (!r.ok) return;
-      const icerik = await r.text();
-      await yerel.dosyaYaz({ agac, yol, icerik, ekle: false });
-      const iz: Record<string, string> = oku("esitleme-izi", {});
-      iz[yol] = await this.sha(icerik);
-      localStorage.setItem("esitleme-izi", JSON.stringify(iz));
+      if (/^Yüzük\/[^/]+\.md$/.test(yol) && (await yerel.vaultMi({ agac })).obsidian) {
+        const r = await fetch(`${this.ayarlar.sunucu}/v1/vault/dosya?yol=${encodeURIComponent(yol)}&surum=3`, { headers: this.basliklar });
+        if (r.ok) {
+          const icerik = await r.text();
+          await yerel.dosyaYaz({ agac, yol, icerik, ekle: false });
+          const iz: Record<string, string> = oku("esitleme-izi", {});
+          iz[yol] = await this.sha(icerik);
+          localStorage.setItem("esitleme-izi", JSON.stringify(iz));
+          return;
+        }
+      }
     } catch {
-      /* not eşitlemeyle gelir */
+      /* telefon kendi yazar */
     }
+    try {
+      // Hatırlatıcılar bilgisayarın notundan kurulur; burada ikinci kez kurulmaz.
+      const n = this.notMetni(o, { ...s, hatirlaticilar: [] }, yol.split("/").pop() || undefined);
+      await yerel.dosyaYaz({ agac, yol: n.yol, icerik: n.icerik, ekle: false });
+    } catch (e) {
+      o.hata = `Telefona yazılamadı — ${(e as Error).message}`;
+    }
+  }
+
+  /** 0.11.4: eşitleme kendiliğinden de çalışır — not yazılınca ve uygulama açılınca (en sık `aralikDk` dakikada bir).
+   *  Vault kökü seçili değilse ya da eşitleme zaten sürüyorsa bir şey yapmaz. */
+  async otoEsitle(aralikDk = 30) {
+    if (!this.hazir || !this.ayarlar.vault || this.esitleme.durum === "calisiyor") return;
+    const son = this.esitleme.son ? Date.parse(this.esitleme.son) : 0;
+    if (aralikDk && Date.now() - son < aralikDk * 60e3) return;
+    if (!(await yerel.vaultMi({ agac: this.ayarlar.vault }).catch(() => ({ obsidian: false }))).obsidian) return;
+    await this.esitle();
+  }
+
+  /** Notun dosya adı ve metni. `ad` verilirse (bilgisayarın yazdığı notun adı) o kullanılır. */
+  private notMetni(o: Oturum, s: NotGirdisi, ad?: string) {
+    const b = new Date(o.baslangic);
+    const iki = (n: number) => String(n).padStart(2, "0");
+    const tarih = `${b.getFullYear()}-${iki(b.getMonth() + 1)}-${iki(b.getDate())}`;
+    const saat = `${iki(b.getHours())}:${iki(b.getMinutes())}`;
+    const baslik = s.baslik?.trim() || o.baslik || "Not";
+    const temiz = baslik.replace(/[\\/:*?"<>|#^[\]]/g, " ").replace(/\s+/g, " ").trim();
+    ad = ad ?? `${tarih} ${iki(b.getHours())}${iki(b.getMinutes())} ${temiz}.md`;
+    const hat = s.hatirlaticilar ?? [];
+    // Not anatomisi Vault Protokolü'ndeki gibi: tags, tür, güncellenme (masaüstündeki Yüzük notlarıyla aynı).
+    let icerik = `---\ntags: [yüzük]\ntür: log\ngüncellenme: ${tarih}\nkaynak: yüzük\ntarih: ${tarih} ${saat}\n---\n\n# ${baslik}\n\n`;
+    icerik += s.not_md?.trim() ? s.not_md.trim() + "\n" : "_Bu oturumda not alınacak bir şey bulunmadı._\n";
+    if (hat.length) icerik += `\n## Hatırlatıcılar\n${hat.map((h) => `- [ ] ${h.metin}${h.saat ? ` · saat ${h.saat}` : ""} 📅 ${h.tarih}`).join("\n")}\n`;
+    const alt = this.ayarlar.altKlasor || "Yüzük";
+    return { ad, yol: `${alt}/${ad}`, icerik, baslik, alt, hat };
   }
 
   private pcNotunuIsle(o: Oturum, s: { baslik?: string; not_md?: string; pc_notu?: string; yazici?: string; mahrem?: number;
@@ -923,20 +969,8 @@ class Hat {
     o.yazan = s.yazici ? (YAZICILAR[s.yazici] ?? s.yazici) : undefined;
     // Seçilen araç çalışmadıysa not yine yazılır; kimin yerine kimin yazdığı görünür kalır.
     o.yedek = s.istenen_yazici ? (YAZICILAR[s.istenen_yazici] ?? s.istenen_yazici) : undefined;
-    const b = new Date(o.baslangic);
-    const iki = (n: number) => String(n).padStart(2, "0");
-    const tarih = `${b.getFullYear()}-${iki(b.getMonth() + 1)}-${iki(b.getDate())}`;
-    const saat = `${iki(b.getHours())}:${iki(b.getMinutes())}`;
-    const baslik = s.baslik?.trim() || o.baslik || "Not";
-    const temiz = baslik.replace(/[\\/:*?"<>|#^[\]]/g, " ").replace(/\s+/g, " ").trim();
-    const ad = `${tarih} ${iki(b.getHours())}${iki(b.getMinutes())} ${temiz}.md`;
-    const hat = s.hatirlaticilar ?? [];
-    // Not anatomisi Vault Protokolü'ndeki gibi: tags, tür, güncellenme (masaüstündeki Yüzük notlarıyla aynı).
-    let not = `---\ntags: [yüzük]\ntür: log\ngüncellenme: ${tarih}\nkaynak: yüzük\ntarih: ${tarih} ${saat}\n---\n\n# ${baslik}\n\n`;
-    not += s.not_md?.trim() ? s.not_md.trim() + "\n" : "_Bu oturumda not alınacak bir şey bulunmadı._\n";
-    if (hat.length) not += `\n## Hatırlatıcılar\n${hat.map((h) => `- [ ] ${h.metin}${h.saat ? ` · saat ${h.saat}` : ""} 📅 ${h.tarih}`).join("\n")}\n`;
-    const alt = this.ayarlar.altKlasor || "Yüzük";
-    const yazilan = await yerel.dosyaYaz({ agac: this.ayarlar.vault!, yol: `${alt}/${ad}`, icerik: not, ekle: false });
+    const { ad, yol, icerik: not, baslik, alt, hat } = this.notMetni(o, s);
+    const yazilan = await yerel.dosyaYaz({ agac: this.ayarlar.vault!, yol, icerik: not, ekle: false });
     o.notAdi = yazilan.ad;
     o.baslik = baslik;
     // Listede notun kendi özeti görünür: "Özet" başlığı altındaki ilk cümle; yoksa bölüm başlıkları.

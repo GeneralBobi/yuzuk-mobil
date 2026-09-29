@@ -68,7 +68,7 @@ export function Uygulama() {
   const [akis, setAkis] = useState<Akis>(null);
 
   useEffect(() => {
-    void hat.baslat();
+    void hat.baslat().then(() => hat.otoEsitle());
     // Sistem çubuğu boşlukları sayfa hazırken yeniden yazılsın (üç tuşlu gezinmede alt menü boşluk bırakıyordu).
     void yerel.kenarlariYenile().catch(() => undefined);
     const linkIsle = (url?: string | null) => {
@@ -84,6 +84,7 @@ export function Uygulama() {
       void hat.ilerlet();
       void hat.baglantiDene();
       void hat.hatirlaticiCek();
+      void hat.otoEsitle();
     });
     // Bilgisayardaki hatırlatıcılar uygulama açıkken 15 dakikada bir yeniden okunur; kurulu alarmlar kapalıyken de çalar.
     const yoklama = window.setInterval(() => void hat.hatirlaticiCek(), 15 * 60e3);
