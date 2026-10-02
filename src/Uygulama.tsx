@@ -391,6 +391,10 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
             </>
           )}
           {!a.anahtar && hat.googleTestAdresi && <button className="dugme" disabled={hat.eslestirme?.durum === "bekliyor"} onClick={() => void hat.googleGiris()}>Google ile devam et</button>}
+          {<div className="bulut-beta">
+            <button className="dugme" disabled aria-describedby="bulut-beta-bilgi">Bulut ile devam et <span className="etiket">beta</span></button>
+            <p id="bulut-beta-bilgi" className="aciklama">Yakında · Şimdilik kullanılamıyor.</p>
+          </div>}
           {hat.eslestirme && (
             <p className={hat.eslestirme.durum === "hata" ? "hata" : "aciklama"}>{hat.eslestirme.metin}</p>
           )}
