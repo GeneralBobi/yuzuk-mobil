@@ -22,6 +22,10 @@ export interface CanliDurum extends KayitDurumu {
 export interface ModelDurumu { hazir: boolean; indiriliyor: boolean; indirilen: number; boyut: number; hata: string | null }
 
 export interface YuzukEklentisi {
+  googleGiris(o: { clientId: string; nonce: string }): Promise<{ idToken: string }>;
+  arkaPlanKur(o: { ayar: { sunucu: string; anahtar: string; vault: string; altKlasor: string; isler: OturumArkaPlan[] } }): Promise<void>;
+  arkaPlanOku(): Promise<{ teslimler: Record<string, { id: string; sunucuId: string; yol: string; hash: string; baslik: string; mahrem: number; yazici: string }> }>;
+  arkaPlanOnayla(o: { ids: string[] }): Promise<void>;
   canliBaslat(o: { sunucu: string; anahtar: string; dil?: string; testPcm?: string }): Promise<{ dokum: string }>;
   canliDurdur(): Promise<{ dokum: string | null; sureSn: number }>;
   canliDurumu(): Promise<CanliDurum>;
@@ -60,6 +64,8 @@ export interface YuzukEklentisi {
   vaultOku(o: { agac: string; yol: string }): Promise<{ icerik: string }>;
   addListener(olay: "paylasim", dinleyici: (p: Paylasim) => void): Promise<{ remove: () => Promise<void> }>;
 }
+
+type OturumArkaPlan = { id: string; sunucuId?: string; yol: string; baslangic: string; baslik?: string };
 
 /** Başka uygulamadan "Paylaş → Yüzük" ile gelen dosya (uygulamanın klasörüne kopyalanmış). */
 export interface Paylasim {

@@ -52,6 +52,80 @@ import java.util.UUID;
                 @Permission(alias = "bildirim", strings = {"android.permission.POST_NOTIFICATIONS"})
         })
 public class YuzukEklentisi extends Plugin {
+    /** Sistem hesap seçicisi. JWT yalnız geçici dönüş değeridir; diske veya tercihlere yazılmaz. */
+    @PluginMethod
+    public void googleGiris(PluginCall call) {
+        String client = call.getString("clientId", ""), nonce = call.getString("nonce", "");
+        if (!client.endsWith(".apps.googleusercontent.com") || !nonce.matches("[a-f0-9]{64}")) { call.reject("Google giriş yapılandırması geçersiz"); return; }
+        getActivity().runOnUiThread(() -> {
+            try {
+                com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption option =
+                        new com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption.Builder(client).setNonce(nonce).build();
+                androidx.credentials.GetCredentialRequest req = new androidx.credentials.GetCredentialRequest.Builder().addCredentialOption(option).build();
+                androidx.credentials.CredentialManager.create(getContext()).getCredentialAsync(getActivity(), req, new android.os.CancellationSignal(),
+                        androidx.core.content.ContextCompat.getMainExecutor(getContext()),
+                        new androidx.credentials.CredentialManagerCallback<androidx.credentials.GetCredentialResponse, androidx.credentials.exceptions.GetCredentialException>() {
+                            @Override public void onResult(androidx.credentials.GetCredentialResponse r) {
+                                try {
+                                    androidx.credentials.Credential cr = r.getCredential();
+                                    if (!(cr instanceof androidx.credentials.CustomCredential)
+                                            || !cr.getType().equals(com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL)) {
+                                        call.reject("Google kimliği alınamadı"); return;
+                                    }
+                                    String token = com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(cr.getData()).getIdToken();
+                                    call.resolve(sonuc("idToken", token));
+                                } catch (Exception e) { call.reject("Google kimliği okunamadı"); }
+                            }
+                            @Override public void onError(androidx.credentials.exceptions.GetCredentialException e) { call.reject("Google girişi tamamlanmadı"); }
+                        });
+            } catch (Exception e) { call.reject("Google girişi başlatılamadı"); }
+        });
+    }
+
+    @PluginMethod
+    public void arkaPlanKur(PluginCall call) {
+        new Thread(() -> {
+            try { ArkaPlanIsci.kur(getContext(), call.getObject("ayar", new JSObject())); call.resolve(); }
+            catch (Exception e) { call.reject("Arka plan eşitlemesi kurulamadı"); }
+        }).start();
+    }
+    @PluginMethod
+    public void arkaPlanOku(PluginCall call) {
+        new Thread(() -> {
+            synchronized (ArkaPlanIsci.KILIT) {
+                try { call.resolve(new JSObject().put("teslimler", new JSObject(ArkaPlanIsci.depo(getContext()).getString("teslimler", "{}")))); }
+                catch (Exception e) { call.reject("Teslim kayıtları okunamadı"); }
+            }
+        }).start();
+    }
+    @PluginMethod
+    public void arkaPlanOnayla(PluginCall call) {
+        new Thread(() -> {
+            synchronized (ArkaPlanIsci.KILIT) {
+                try {
+                    JSONObject v = new JSONObject(ArkaPlanIsci.depo(getContext()).getString("teslimler", "{}"));
+                    JSArray ids = call.getArray("ids", new JSArray());
+                    JSONObject a = new JSONObject(ArkaPlanIsci.depo(getContext()).getString("ayar", "{}"));
+                    JSArray kalan = new JSArray();
+                    org.json.JSONArray jobs = a.optJSONArray("isler");
+                    java.util.Set<String> alinan = new java.util.HashSet<>();
+                    for (int n = 0; n < ids.length(); n++) if (v.has(ids.getString(n))) alinan.add(ids.getString(n));
+                    if (jobs != null) for (int n = 0; n < jobs.length(); n++) {
+                        JSONObject job = jobs.getJSONObject(n);
+                        if (!alinan.contains(job.optString("sunucuId"))) kalan.put(job);
+                    }
+                    a.put("isler", kalan);
+                    for (int n = 0; n < ids.length(); n++) {
+                        String id = ids.getString(n);
+                        if (!v.has(id) || !id.matches("[0-9a-f]{32}")) continue;
+                        try { ArkaPlanIsci.istek(a, "/v1/oturum/" + id, "DELETE"); v.remove(id); } catch (Exception ignored) { }
+                    }
+                    if (!ArkaPlanIsci.depo(getContext()).edit().putString("teslimler", v.toString()).putString("ayar", a.toString()).commit()) throw new IllegalStateException();
+                    call.resolve();
+                } catch (Exception e) { call.reject("Teslim kayıtları güncellenemedi"); }
+            }
+        }).start();
+    }
 
     // ------------------------------------------------ kenar boşlukları (0.8.0)
 

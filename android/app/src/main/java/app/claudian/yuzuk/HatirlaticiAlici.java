@@ -175,7 +175,17 @@ public class HatirlaticiAlici extends BroadcastReceiver {
         }
     }
 
-    static void kur(Context c, String id, long zamanMs, String baslik, String metin) throws Exception {
+    static synchronized void bekleyenleriGonder(Context c) throws Exception {
+        SharedPreferences p = c.getSharedPreferences(DEPO, Context.MODE_PRIVATE);
+        JSONArray liste = new JSONArray(p.getString("islemler", "[]")), kalan = new JSONArray();
+        for (int k = 0; k < liste.length(); k++) {
+            JSONObject v = liste.getJSONObject(k);
+            if (!gonder(c, v.getString("kimlik"), v.getString("islem"))) kalan.put(v);
+        }
+        p.edit().putString("islemler", kalan.toString()).commit();
+    }
+
+    static synchronized void kur(Context c, String id, long zamanMs, String baslik, String metin) throws Exception {
         SharedPreferences p = c.getSharedPreferences(DEPO, Context.MODE_PRIVATE);
         JSONArray liste = new JSONArray(p.getString("liste", "[]"));
         JSONArray yeni = new JSONArray();
@@ -212,7 +222,7 @@ public class HatirlaticiAlici extends BroadcastReceiver {
      * Zamanı geçmiş ama bugüne ait olan (ör. 09:00'dan sonra eklenen) bir kez hemen gösterilir. Telefonun kendi notundan
      * kurduğu aynı iş (aynı metin, yakın zaman) ikinci kez çalmaz. Kurulan sayısını döndürür.
      */
-    static int esitle(Context c, JSONArray gelen) throws Exception {
+    static synchronized int esitle(Context c, JSONArray gelen) throws Exception {
         SharedPreferences p = c.getSharedPreferences(DEPO, Context.MODE_PRIVATE);
         JSONArray liste = new JSONArray(p.getString("liste", "[]"));
         JSONArray gosterilen = new JSONArray(p.getString("gosterilen", "[]"));
@@ -258,7 +268,7 @@ public class HatirlaticiAlici extends BroadcastReceiver {
     }
 
     /** Gösterilenler üç gün hatırlanır: aynı hatırlatıcı bir sonraki eşitlemede yeniden çalmasın. */
-    private static void gosterildi(Context c, String id, String baslik, long zaman) {
+    private static synchronized void gosterildi(Context c, String id, String baslik, long zaman) {
         if (id == null) return;
         try {
             SharedPreferences p = c.getSharedPreferences(DEPO, Context.MODE_PRIVATE);
@@ -271,7 +281,7 @@ public class HatirlaticiAlici extends BroadcastReceiver {
         } catch (Exception ignored) { }
     }
 
-    private static void hepsiniKur(Context c) {
+    private static synchronized void hepsiniKur(Context c) {
         try {
             JSONArray liste = new JSONArray(c.getSharedPreferences(DEPO, Context.MODE_PRIVATE).getString("liste", "[]"));
             long simdi = System.currentTimeMillis();
@@ -283,7 +293,7 @@ public class HatirlaticiAlici extends BroadcastReceiver {
         } catch (Exception ignored) { }
     }
 
-    private static void sil(Context c, String id) {
+    private static synchronized void sil(Context c, String id) {
         try {
             SharedPreferences p = c.getSharedPreferences(DEPO, Context.MODE_PRIVATE);
             JSONArray liste = new JSONArray(p.getString("liste", "[]"));

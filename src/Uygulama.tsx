@@ -236,6 +236,7 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
       {hat.kaydediyor && hat.canli && <ParcaDurumu />}
 
       {hat.uyari && <p className="hata" role="alert">{hat.uyari}</p>}
+      {hat.arkaPlanHatasi && <p className="hata" role="alert">{hat.arkaPlanHatasi}</p>}
 
       <button className="dugme genis" onClick={() => void hat.iceAktar()} disabled={hat.kaydediyor}>
         <FileAudio size={18} /> Dosyadan not çıkar
@@ -314,7 +315,7 @@ function OturumSatiri({ o }: { o: Oturum }) {
     o.kisi ? `${o.kisi} kişi` : null,
     o.senPayi !== undefined ? `sen %${Math.round(o.senPayi * 100)}` : null,
     o.hatirlatici ? `${o.hatirlatici} hatırlatıcı` : null,
-    o.mahrem ? `${o.mahrem} cümle mahrem sayılıp çıkarıldı` : null,
+    o.mahrem !== undefined ? `${o.mahrem} mahrem cümle çıkarıldı` : null,
     o.yazan ? (o.yedek ? `${o.yedek} çalışmadı, notu ${o.yazan} yazdı` : `notu ${o.yazan} yazdı`) : null,
   ].filter(Boolean);
 
@@ -389,7 +390,8 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
               </div>
             </>
           )}
-          {hat.eslestirme && hat.eslestirme.durum !== "tamam" && (
+          {!a.anahtar && hat.googleTestAdresi && <button className="dugme" disabled={hat.eslestirme?.durum === "bekliyor"} onClick={() => void hat.googleGiris()}>Google ile devam et</button>}
+          {hat.eslestirme && (
             <p className={hat.eslestirme.durum === "hata" ? "hata" : "aciklama"}>{hat.eslestirme.metin}</p>
           )}
         </div>

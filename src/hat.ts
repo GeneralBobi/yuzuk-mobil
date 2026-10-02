@@ -12,6 +12,7 @@
 import { yerel, type CanliDurum, type ModelDurumu, type Paylasim } from "./yerel";
 import protokol from "./vault/protokol.md?raw";
 import { version as SURUM } from "../package.json";
+import { agIstek } from "./ag";
 
 type NotGirdisi = { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: string; saat?: string; metin: string }[] };
 
@@ -104,9 +105,30 @@ class Hat {
   seviye = 0;
   okuma = 0; // her 250 ms'lik düzey okumasında artar: halka aynı düzeyi de yeni bir çizgi olarak işler
   uyari: string | null = null;
+  arkaPlanHatasi: string | null = null;
   canli: CanliDurum | null = null; // süren kaydın parça durumu (kaçı bilgisayarda, kaçı telefonda metne döndü)
   model: ModelDurumu | null = null; // çevrimdışı yazıya dökme modeli
   eslestirme: { durum: "bekliyor" | "tamam" | "hata"; metin: string } | null = null;
+  // Google denemesi ayrı API adresinde derlenir; normal sürümde düğme ve adres yoktur.
+  googleTestAdresi: string | null = /^https:\/\/yuzuk-test\.claudian\.app$/.test(import.meta.env.VITE_GOOGLE_TEST_API ?? "") ? import.meta.env.VITE_GOOGLE_TEST_API : null;
+
+  async googleGiris() {
+    if (!this.googleTestAdresi || this.ayarlar.anahtar || this.eslestirme?.durum === "bekliyor") return;
+    this.eslestirme = { durum: "bekliyor", metin: "Google hesabı seçiliyor…" }; this.yayinla();
+    try {
+      const r = await agIstek(`${this.googleTestAdresi}/v1/google/nonce`, { method: "POST" });
+      const n = await r.json();
+      if (!r.ok) throw new Error(n.detail ?? "Google girişi kapalı.");
+      const g = await yerel.googleGiris({ clientId: n.client_id, nonce: n.nonce });
+      const giris = await agIstek(`${this.googleTestAdresi}/v1/google/giris`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_token: g.idToken, nonce: n.nonce, ad: "Yüzük Android" }) });
+      const j = await giris.json();
+      if (!giris.ok) throw new Error(j.detail ?? "Giriş tamamlanmadı.");
+      this.ayarlar.sunucu = this.googleTestAdresi; this.ayarlar.anahtar = j.anahtar;
+      this.eslestirme = { durum: "tamam", metin: "Giriş tamamlandı; cihaz onayı bekleniyor." };
+      this.sakla(); void this.baglantiDene(); void this.hesapYukle();
+    } catch (e) { this.eslestirme = { durum: "hata", metin: (e as Error).message }; this.yayinla(); }
+  }
   sesIzi: SesIzi | null = null;
   sesKaydi: "yok" | "kayitta" | "isleniyor" = "yok";
   sesHatasi: string | null = null;
@@ -116,6 +138,7 @@ class Hat {
   private dinleyiciler = new Set<Dinleyici>();
   private yoklama: number | null = null;
   private ilerliyor = false;
+  private arkaKur: Promise<void> = Promise.resolve();
 
   get hazir() {
     return !!(this.ayarlar.sunucu && this.ayarlar.anahtar && this.ayarlar.vault);
@@ -133,10 +156,21 @@ class Hat {
   private sakla() {
     localStorage.setItem("oturumlar", JSON.stringify(this.oturumlar));
     localStorage.setItem("ayarlar", JSON.stringify(this.ayarlar));
+    const ayar = { sunucu: this.ayarlar.sunucu, anahtar: this.ayarlar.anahtar, vault: this.ayarlar.vault ?? "",
+      altKlasor: this.ayarlar.altKlasor || "Yüzük", isler: this.oturumlar.filter(o => o.durum === "sunucuda").map(o =>
+        ({ id: o.id, sunucuId: o.sunucuId, yol: o.yol, baslangic: o.baslangic, baslik: o.baslik })) };
+    this.arkaKur = this.arkaKur.then(async () => {
+      await yerel.arkaPlanKur({ ayar });
+      if (this.arkaPlanHatasi) { this.arkaPlanHatasi = null; this.yayinla(); }
+    }).catch(() => {
+      this.arkaPlanHatasi = "Arka plan teslimatı kurulamadı. Uygulama açıkken yeniden denenecek; kayıt kaynağın korunuyor.";
+      this.yayinla();
+    });
     this.yayinla();
   }
 
   async baslat() {
+    await this.arkaPlanTeslimleriniAl();
     const c = await yerel.canliDurumu().catch(() => null);
     if (c?.calisiyor) {
       this.kaydediyor = true;
@@ -230,7 +264,7 @@ class Hat {
     const iz: Record<string, string> = oku("esitleme-izi", {});
     const yeniIz: Record<string, string> = {};
     try {
-      const r = await fetch(`${kok}/liste?${surum}`, { headers: this.basliklar });
+      const r = await agIstek(`${kok}/liste?${surum}`, { headers: this.basliklar });
       if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { detail?: string }).detail ?? `Bulut ${r.status}`);
       const liste = (await r.json()) as { dosyalar: { yol: string; sha: string; mtime: number }[]; silinen?: string[] };
       const pc = new Map(liste.dosyalar.map((d) => [d.yol, d]));
@@ -250,13 +284,13 @@ class Hat {
       const kopyaMi = (yol: string, sha: string) =>
         (yol.startsWith(alt) && pc.has(yol.slice(alt.length))) || pcIzleri.has(sha);
       const indir = async (yol: string) => {
-        const g = await fetch(`${kok}/dosya?yol=${encodeURIComponent(yol)}&${surum}`, { headers: this.basliklar });
+        const g = await agIstek(`${kok}/dosya?yol=${encodeURIComponent(yol)}&${surum}`, { headers: this.basliklar });
         if (!g.ok) throw new Error(`${yol} alınamadı (${g.status})`);
         await yerel.dosyaYaz({ agac, yol, icerik: await g.text(), ekle: false });
         say.indirilen++;
       };
       const gonder = async (yol: string, icerik: string, yedek = false) => {
-        const p = await fetch(`${kok}/dosya?yol=${encodeURIComponent(yol)}&${surum}${yedek ? "&yedek=1" : ""}`, {
+        const p = await agIstek(`${kok}/dosya?yol=${encodeURIComponent(yol)}&${surum}${yedek ? "&yedek=1" : ""}`, {
           method: "PUT", headers: { ...this.basliklar, "Content-Type": "text/markdown; charset=utf-8" }, body: icerik });
         if (!p.ok) throw new Error(`${yol} gönderilemedi (${p.status})`);
         if (!yedek) say.gonderilen++;
@@ -354,7 +388,7 @@ class Hat {
     this.yayinla();
     try {
       const izi = (await yerel.cihazIzi().catch(() => ({} as { izi?: string }))).izi;
-      const r = await fetch(`${this.ayarlar.sunucu || VARSAYILAN_SUNUCU}/v1/eslestir`, {
+      const r = await agIstek(`${this.ayarlar.sunucu || VARSAYILAN_SUNUCU}/v1/eslestir`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kod: temiz, ad: "Android telefon", ...(izi ? { izi } : {}) }),
@@ -392,7 +426,7 @@ class Hat {
     };
     if (!this.ayarlar.anahtar) return sonuc("bilinmiyor", "");
     try {
-      const r = await fetch(`${this.ayarlar.sunucu}/v1/saglik`, { headers: this.basliklar });
+      const r = await agIstek(`${this.ayarlar.sunucu}/v1/saglik`, { headers: this.basliklar });
       if (r.status === 401) return sonuc("anahtar", "Yeniden eşleştir.");
       if (r.status === 503) return sonuc("kapali", ((await r.json().catch(() => ({}))) as { detail?: string }).detail ?? "Bilgisayar çevrim dışı. Kayıtlar telefonda.");
       if (!r.ok) return sonuc("kapali", `Bulut ${r.status} döndü. Kayıtlar telefonda bekler.`);
@@ -424,7 +458,7 @@ class Hat {
     for (const i of [...bekleyen, ...gelen]) {
       if (!/^[0-9a-f]{16}$/.test(i.kimlik) || !["yapildi", "yarin"].includes(i.islem) || i.an < hafta) continue;
       try {
-        const r = await fetch(`${this.ayarlar.sunucu}/v1/hatirlaticilar/${i.kimlik}`, {
+        const r = await agIstek(`${this.ayarlar.sunucu}/v1/hatirlaticilar/${i.kimlik}`, {
           method: "POST", headers: { ...this.basliklar, "Content-Type": "application/json" }, body: JSON.stringify({ islem: i.islem }) });
         if (r.status >= 500 || r.status === 401 || r.status === 429) kalan.push(i);
       } catch {
@@ -445,7 +479,7 @@ class Hat {
       this.yayinla();
     };
     try {
-      const r = await fetch(`${this.ayarlar.sunucu}/v1/hatirlaticilar`, { headers: this.basliklar });
+      const r = await agIstek(`${this.ayarlar.sunucu}/v1/hatirlaticilar`, { headers: this.basliklar });
       if (!r.ok) {
         const neden = ((await r.json().catch(() => ({}))) as { detail?: string }).detail;
         guncelle({ metin: r.status === 404 ? "Bilgisayardaki Claudian eski."
@@ -492,7 +526,7 @@ class Hat {
   async hesapYukle() {
     if (!this.ayarlar.anahtar) return;
     try {
-      const r = await fetch(`${this.ayarlar.sunucu}/v1/hesap`, { headers: this.basliklar });
+      const r = await agIstek(`${this.ayarlar.sunucu}/v1/hesap`, { headers: this.basliklar });
       if (r.ok) {
         this.hesap = await r.json();
         this.yayinla();
@@ -511,7 +545,7 @@ class Hat {
     this.hesapSilme = { durum: "siliniyor", metin: "Siliniyor…" };
     this.yayinla();
     try {
-      const r = await fetch(`${this.ayarlar.sunucu}/v1/hesap`, { method: "DELETE",
+      const r = await agIstek(`${this.ayarlar.sunucu}/v1/hesap`, { method: "DELETE",
         headers: { ...this.basliklar, "Content-Type": "application/json" }, body: JSON.stringify({ onay: "SİL" }) });
       const j = (await r.json().catch(() => ({}))) as { detail?: string; ses_izi?: string };
       if (!r.ok) throw new Error(j.detail ?? `Bulut ${r.status} döndü; hesap silinmedi.`);
@@ -528,7 +562,7 @@ class Hat {
   }
 
   async cihazIptal(id: string) {
-    const r = await fetch(`${this.ayarlar.sunucu}/v1/cihaz/${id}`, { method: "DELETE", headers: this.basliklar }).catch(() => null);
+    const r = await agIstek(`${this.ayarlar.sunucu}/v1/cihaz/${id}`, { method: "DELETE", headers: this.basliklar }).catch(() => null);
     if (r?.ok) await this.hesapYukle();
   }
 
@@ -537,7 +571,7 @@ class Hat {
   async sesIziYukle() {
     if (!this.ayarlar.anahtar) return;
     try {
-      const r = await fetch(`${this.ayarlar.sunucu}/v1/profil`, { headers: this.basliklar });
+      const r = await agIstek(`${this.ayarlar.sunucu}/v1/profil`, { headers: this.basliklar });
       if (r.ok) {
         this.sesIzi = await r.json();
         this.yayinla();
@@ -601,7 +635,7 @@ class Hat {
   }
 
   async sesIziSil() {
-    const r = await fetch(`${this.ayarlar.sunucu}/v1/profil`, { method: "DELETE", headers: this.basliklar }).catch(() => null);
+    const r = await agIstek(`${this.ayarlar.sunucu}/v1/profil`, { method: "DELETE", headers: this.basliklar }).catch(() => null);
     if (r?.ok) this.sesIzi = { var: false };
     this.yayinla();
   }
@@ -714,6 +748,7 @@ class Hat {
     if (this.ilerliyor || !this.hazir) return;
     this.ilerliyor = true;
     try {
+      await this.arkaPlanTeslimleriniAl();
       for (const o of this.oturumlar.filter((o) => o.durum === "yerel")) await this.gonder(o);
       for (const o of this.oturumlar.filter((o) => o.durum === "sunucuda")) await this.sor(o);
     } finally {
@@ -728,7 +763,40 @@ class Hat {
     if (sunucuda || telefonda) this.yoklama = window.setTimeout(() => void this.ilerlet(), sunucuda ? 5000 : 30000);
   }
 
+  /** Android'in ekran kapalıyken yazdığı notlar tekrar yazılmaz ve aynı kayıt yeniden yüklenmez. */
+  async arkaPlanTeslimleriniAl() {
+    const r = await yerel.arkaPlanOku().catch(() => null);
+    if (!r) return;
+    const ids: string[] = [];
+    const iz: Record<string, string> = oku("esitleme-izi", {});
+    for (const [id, t] of Object.entries(r.teslimler)) {
+      const o = this.oturumlar.find(o => o.id === t.id && o.sunucuId === id);
+      if (!o) continue;
+      o.durum = "yazildi";
+      o.notAdi = t.yol ? t.yol.split("/").pop() : undefined;
+      o.baslik = t.baslik || o.baslik;
+      o.mahrem = t.mahrem;
+      o.yazan = YAZICILAR[t.yazici] ?? t.yazici;
+      o.asama = undefined; o.hata = undefined;
+      if (t.yol && t.hash) iz[t.yol] = t.hash;
+      await yerel.dosyaSil({ yol: o.yol }).catch(() => undefined);
+      ids.push(id);
+    }
+    if (!ids.length) return;
+    localStorage.setItem("esitleme-izi", JSON.stringify(iz));
+    this.sakla();
+    await yerel.arkaPlanOnayla({ ids }).catch(() => undefined);
+  }
+
   async tekrarDene(o: Oturum) {
+    // Bir iş zaten kabul edildiyse aynı sesi ikinci kez göndermek yerine sonucu yeniden al.
+    if (o.sunucuId && o.durum !== "hata") {
+      o.durum = "sunucuda";
+      o.hata = undefined;
+      this.sakla();
+      void this.ilerlet();
+      return;
+    }
     const sesVar = (await yerel.dosyaVarMi({ yol: o.yol })).var;
     o.hata = undefined;
     if (sesVar) {
@@ -779,7 +847,7 @@ class Hat {
     o.hata = undefined;
     this.yayinla();
     try {
-      const r = await fetch(`${this.ayarlar.sunucu}/v1/dokum`, {
+      const r = await agIstek(`${this.ayarlar.sunucu}/v1/dokum`, {
         method: "POST",
         headers: { ...this.basliklar, "Content-Type": "application/json" },
         body: JSON.stringify({ dokum: JSON.parse(d.dokum), baslangic: o.baslangic, baslik: o.baslik, yazici: this.ayarlar.yazici || "claude" }),
@@ -833,7 +901,7 @@ class Hat {
 
   private async sor(o: Oturum) {
     try {
-      const r = await fetch(`${this.ayarlar.sunucu}/v1/oturum/${o.sunucuId}`, { headers: this.basliklar });
+      const r = await agIstek(`${this.ayarlar.sunucu}/v1/oturum/${o.sunucuId}`, { headers: this.basliklar });
       if (r.status === 404) {
         o.durum = "hata";
         o.hata = "Sunucu bu kaydı artık tanımıyor";
@@ -847,18 +915,24 @@ class Hat {
           // 1.5.0: not bilgisayarın vault'una yazıldı (aynı ad, aynı klasör). 0.11.3: telefon o notun aynısını (aynı yol,
           // aynı içerik) bilgisayardan alıp kendi vault'una da yazar; eşitleme ikisini aynı görür, kopya oluşmaz.
           // Tarihli işler bilgisayarın hatırlatıcı notundan düğmeli bildirim olarak kurulur.
-          this.pcNotunuIsle(o, j.sonuc);
           await this.pcNotunuTelefonaYaz(o, j.sonuc);
+          this.pcNotunuIsle(o, j.sonuc);
+          void yerel.bildir({ baslik: `Not hazır · ${o.baslik ?? "Not"}`, metin: "Obsidian'a yazıldı." }).catch(() => undefined);
           void this.hatirlaticiCek();
           void this.otoEsitle(0);
         } else if (j.sonuc?.not_md?.trim()) {
           await this.obsidianaYaz(o, j.sonuc);
-        } else {
+        } else if (j.sonuc) {
           // Konuşma yoksa vault'a boş dosya yazılmaz.
+          o.mahrem = j.sonuc.mahrem ?? 0;
           o.ozet = "Not alınacak konuşma bulunamadı; vault'a bir şey yazılmadı.";
           o.baslik = o.baslik ?? "Sessiz kayıt";
+        } else {
+          // Bulutta yalnız ilerleme var; düğüm sonuç vermeden kayıt tamamlanmış sayılmaz.
+          o.asama = "Not alınıyor";
+          return;
         }
-        await fetch(`${this.ayarlar.sunucu}/v1/oturum/${o.sunucuId}`, { method: "DELETE", headers: this.basliklar }).catch(() => undefined);
+        await agIstek(`${this.ayarlar.sunucu}/v1/oturum/${o.sunucuId}`, { method: "DELETE", headers: this.basliklar }).catch(() => undefined);
         o.durum = "yazildi";
         o.asama = undefined;
         o.hata = undefined;
@@ -871,7 +945,7 @@ class Hat {
         o.hata = undefined;
       }
     } catch (e) {
-      o.hata = `Bağlantı: ${(e as Error).message}`; // sunucuda kalır, sonraki yoklamada tekrar sorulur
+      o.hata = baglantiHatasi((e as Error).message); // sunucuda kalır, sonraki yoklamada tekrar sorulur
     }
     this.sakla();
   }
@@ -885,11 +959,13 @@ class Hat {
    *  bilgisayarda kalmıştı. */
   private async pcNotunuTelefonaYaz(o: Oturum, s: NotGirdisi & { pc_notu?: string }) {
     const agac = this.ayarlar.vault;
-    if (!agac) return;
+    if (!agac) throw new Error("Obsidian kasası seçilmedi; kayıt korunuyor.");
     const yol = String(s.pc_notu);
+    if (!/^Yüzük\/[^/]+\.md$/.test(yol)) throw new Error("Notun dosya yolu geçersiz; kayıt korunuyor.");
+    if (!(await yerel.vaultMi({ agac })).obsidian) throw new Error("Obsidian kasasının kök klasörünü seç; kayıt korunuyor.");
     try {
       if (/^Yüzük\/[^/]+\.md$/.test(yol) && (await yerel.vaultMi({ agac })).obsidian) {
-        const r = await fetch(`${this.ayarlar.sunucu}/v1/vault/dosya?yol=${encodeURIComponent(yol)}&surum=3`, { headers: this.basliklar });
+        const r = await agIstek(`${this.ayarlar.sunucu}/v1/vault/dosya?yol=${encodeURIComponent(yol)}&surum=3`, { headers: this.basliklar });
         if (r.ok) {
           const icerik = await r.text();
           await yerel.dosyaYaz({ agac, yol, icerik, ekle: false });
@@ -905,9 +981,9 @@ class Hat {
     try {
       // Hatırlatıcılar bilgisayarın notundan kurulur; burada ikinci kez kurulmaz.
       const n = this.notMetni(o, { ...s, hatirlaticilar: [] }, yol.split("/").pop() || undefined);
-      await yerel.dosyaYaz({ agac, yol: n.yol, icerik: n.icerik, ekle: false });
+      await yerel.dosyaYaz({ agac, yol, icerik: n.icerik, ekle: false });
     } catch (e) {
-      o.hata = `Telefona yazılamadı — ${(e as Error).message}`;
+      throw new Error(`Telefona yazılamadı — ${(e as Error).message}`);
     }
   }
 
@@ -932,7 +1008,7 @@ class Hat {
     ad = ad ?? `${tarih} ${iki(b.getHours())}${iki(b.getMinutes())} ${temiz}.md`;
     const hat = s.hatirlaticilar ?? [];
     // Not anatomisi Vault Protokolü'ndeki gibi: tags, tür, güncellenme (masaüstündeki Yüzük notlarıyla aynı).
-    let icerik = `---\ntags: [yüzük]\ntür: log\ngüncellenme: ${tarih}\nkaynak: yüzük\ntarih: ${tarih} ${saat}\n---\n\n# ${baslik}\n\n`;
+    let icerik = `---\ntags: [yüzük]\ntür: log\ngüncellenme: ${tarih}\nkaynak: ses\ntarih: ${tarih} ${saat}\n---\n\n# ${baslik}\n\n`;
     icerik += s.not_md?.trim() ? s.not_md.trim() + "\n" : "_Bu oturumda not alınacak bir şey bulunmadı._\n";
     if (hat.length) icerik += `\n## Hatırlatıcılar\n${hat.map((h) => `- [ ] ${h.metin}${h.saat ? ` · saat ${h.saat}` : ""} 📅 ${h.tarih}`).join("\n")}\n`;
     const alt = this.ayarlar.altKlasor || "Yüzük";
@@ -941,7 +1017,7 @@ class Hat {
 
   private pcNotunuIsle(o: Oturum, s: { baslik?: string; not_md?: string; pc_notu?: string; yazici?: string; mahrem?: number;
     konusmaci?: { sayi?: number; sen?: boolean; sureler?: Record<string, number> } }) {
-    o.mahrem = s.mahrem || undefined;
+    o.mahrem = s.mahrem ?? 0;
     const k = s.konusmaci;
     if (k?.sayi) {
       o.kisi = k.sayi;
@@ -955,12 +1031,11 @@ class Hat {
     const ozetBasi = satirlar.findIndex((l) => /^#{2,4}\s*Özet/i.test(l));
     const ilk = ozetBasi >= 0 ? satirlar.slice(ozetBasi + 1).find((l) => l.trim() && !l.startsWith("#")) : undefined;
     o.ozet = ilk ? ilk.replace(/^[-*]\s*/, "").replace(/\*\*/g, "").split(/(?<=[.!?])\s/)[0].slice(0, 180) : undefined;
-    void yerel.bildir({ baslik: `Not hazır · ${o.baslik ?? "Not"}`, metin: "Obsidian'a yazıldı." }).catch(() => undefined);
   }
 
   private async obsidianaYaz(o: Oturum, s: { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: string; saat?: string; metin: string }[];
     konusmaci?: { sayi?: number; sen?: boolean; sureler?: Record<string, number> }; yazici?: string; istenen_yazici?: string; mahrem?: number }) {
-    o.mahrem = s.mahrem || undefined;
+    o.mahrem = s.mahrem ?? 0;
     const k = s.konusmaci;
     if (k?.sayi) {
       o.kisi = k.sayi;
@@ -1001,13 +1076,14 @@ class Hat {
     await yerel.bildir({
       baslik: `Not hazır · ${baslik}`,
       metin: hat.length ? `${hat.length} hatırlatıcı: ${hat.map((h) => `${h.tarih} ${h.metin}`).join(" · ")}` : `Obsidian → ${alt}`,
-    });
+    }).catch(() => undefined);
   }
 }
 
 /** Android'in ham ağ hatalarını anlaşılır cümleye çevirir; kayıt her durumda telefonda kalır ve yeniden denenir. */
 export function baglantiHatasi(ham: string): string {
   const m = ham.toLowerCase();
+  if (/failed to fetch|networkerror|load failed/.test(m)) return "Bağlantı kesildi; kayıt korunuyor ve yeniden denenecek.";
   if (/connection abort|connection reset|broken pipe|unexpected end of stream|socket closed/.test(m))
     return "bağlantı koptu. Kayıt telefonda.";
   if (/timeout|timed out/.test(m)) return "bağlantı çok yavaş. Kayıt telefonda duruyor; yeniden denenecek.";
