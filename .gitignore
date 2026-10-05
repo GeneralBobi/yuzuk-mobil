@@ -9,3 +9,4 @@ android/local.properties
 # Play yükleme anahtarı: git'e girmez, yedeklenmeli
 android/yuzuk-yukleme.jks
 android/keystore.properties
+android/app/google-services.json

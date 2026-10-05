@@ -120,6 +120,7 @@ public class ArkaPlanIsci extends Worker {
             yuklemeler = new JSONObject(depo(c).getString("yuklemeler", "{}"));
         }
         if (a.optString("anahtar").isEmpty() || !a.optString("sunucu").startsWith("https://")) return -1;
+        YuzukMesajServisi.kaydet(c); // push anahtarı ilk denemede gidemediyse burada yeniden denenir
         int bekleyen = 0;
         for (Iterator<String> it = teslimler.keys(); it.hasNext() && !dur.getAsBoolean() && android.os.SystemClock.elapsedRealtime() < son;) {
             try { istek(a, "/v1/oturum/" + it.next(), "DELETE"); } catch (Exception ignored) { }
@@ -332,7 +333,13 @@ public class ArkaPlanIsci extends Worker {
                 JSONObject h = hats.getJSONObject(k);
                 md.append("- [ ] ").append(h.getString("metin"));
                 if (!saat(h).isEmpty()) md.append(" · saat ").append(saat(h));
-                md.append(" 📅 ").append(h.getString("tarih")).append("\n");
+                md.append(" 📅 ").append(h.getString("tarih"));
+                JSONArray anlar = h.optJSONArray("hatirlat");
+                if (anlar != null && anlar.length() > 0) {
+                    md.append(" ⏰ ");
+                    for (int j = 0; j < anlar.length(); j++) md.append(j > 0 ? ", " : "").append(anlar.getString(j));
+                }
+                md.append("\n");
             }
         }
         return new JSONObject().put("yol", alt + "/" + ad).put("icerik", md.toString());
@@ -341,12 +348,22 @@ public class ArkaPlanIsci extends Worker {
     static void kendiHatirlaticilari(Context c, JSONObject o, JSONObject s) throws Exception {
         JSONArray liste = s.optJSONArray("hatirlaticilar");
         if (liste == null) return;
+        // 0.12.0: sabit "yarım saat önce" yok. Kalem kendi vaktinde, ayrıca yazıcının seçtiği her "hatirlat" anında çalar.
+        long simdi = System.currentTimeMillis();
         for (int k = 0; k < liste.length(); k++) {
             JSONObject h = liste.getJSONObject(k);
             String saat = saat(h);
-            long zaman = tarih(h.getString("tarih"), saat.isEmpty() ? "09:00" : saat);
-            if (!saat.isEmpty()) zaman -= 30 * 60_000L;
-            if (zaman > System.currentTimeMillis()) HatirlaticiAlici.kur(c, o.getString("id") + "-" + k, zaman, h.getString("metin"), h.getString("tarih"));
+            long vakit = tarih(h.getString("tarih"), saat.isEmpty() ? "09:00" : saat);
+            String gun = h.getString("tarih") + (saat.isEmpty() ? "" : " " + saat);
+            if (vakit > simdi) HatirlaticiAlici.kur(c, o.getString("id") + "-" + k, vakit, h.getString("metin"), gun);
+            JSONArray anlar = h.optJSONArray("hatirlat");
+            for (int j = 0; anlar != null && j < anlar.length(); j++) {
+                String[] p = anlar.getString(j).split(" ");
+                if (p.length != 2) continue;
+                long an;
+                try { an = tarih(p[0], p[1]); } catch (Exception e) { continue; }
+                if (an > simdi && an < vakit) HatirlaticiAlici.kur(c, o.getString("id") + "-" + k + "-" + j, an, h.getString("metin"), gun);
+            }
         }
     }
 

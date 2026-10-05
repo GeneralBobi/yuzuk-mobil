@@ -85,7 +85,7 @@ public class YuzukEklentisi extends Plugin {
     @PluginMethod
     public void arkaPlanKur(PluginCall call) {
         new Thread(() -> {
-            try { ArkaPlanIsci.kur(getContext(), call.getObject("ayar", new JSObject())); call.resolve(); }
+            try { ArkaPlanIsci.kur(getContext(), call.getObject("ayar", new JSObject())); YuzukMesajServisi.baslat(getContext()); call.resolve(); }
             catch (Exception e) { call.reject("Arka plan eşitlemesi kurulamadı"); }
         }).start();
     }
