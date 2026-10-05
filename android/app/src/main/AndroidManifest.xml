@@ -57,6 +57,15 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
+        <!-- 0.12.0: bulutun zili (FCM). Gövde yalnız "esitle"/"not" işareti taşır; içerik telefon kendi anahtarıyla çeker. -->
+        <service
+            android:name=".YuzukMesajServisi"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".HatirlaticiAlici"
             android:exported="false">
