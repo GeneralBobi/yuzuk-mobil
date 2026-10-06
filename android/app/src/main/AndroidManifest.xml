@@ -57,6 +57,12 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
+        <!-- 0.11.8: uygulamadan çıkınca bekleyen kaydı yükler, notu teslim alır; iş bitince kendini kapatır. -->
+        <service
+            android:name=".TeslimServisi"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <receiver
             android:name=".HatirlaticiAlici"
             android:exported="false">
@@ -84,6 +90,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 </manifest>

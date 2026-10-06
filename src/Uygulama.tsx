@@ -299,11 +299,12 @@ const DURAKLAR = ["telefonda", "bulutta", "yazılıyor", "obsidian"];
 
 function OturumSatiri({ o }: { o: Oturum }) {
   const [acik, setAcik] = useState(false);
+  const [kaldirOnay, setKaldirOnay] = useState(false);
   const hataVar = o.durum === "hata" || !!o.hata;
   const d = durak(o);
   const durumMetni = (() => {
     switch (o.durum) {
-      case "yerel": return o.hata ? "gönderilemedi" : hat.hazir ? "gönderilecek" : "kurulum bekliyor";
+      case "yerel": return o.hata ? "gönderilemedi" : o.asama ? o.asama.toLocaleLowerCase("tr") : hat.hazir ? "gönderilecek" : "kurulum bekliyor";
       case "gonderiliyor": return "gönderiliyor";
       case "sunucuda": return (o.asama ?? "işleniyor").toLocaleLowerCase("tr");
       case "yazildi": return o.notAdi ? "obsidian'da" : "konuşma yok";
@@ -343,9 +344,35 @@ function OturumSatiri({ o }: { o: Oturum }) {
       {acik && (
         <div className="oturum-eylem">
           {o.durum !== "yazildi" && <button className="metin-dugme kor" onClick={() => void hat.tekrarDene(o)}>Tekrar dene</button>}
-          <button className="metin-dugme" onClick={() => void hat.kaldir(o)}>Listeden kaldır</button>
+          <button className="metin-dugme" onClick={() => setKaldirOnay(true)}>Listeden kaldır</button>
         </div>
       )}
+      {kaldirOnay && <KaldirmaOnayi o={o} ad={ad} kapat={() => setKaldirOnay(false)} />}
+    </div>
+  );
+}
+
+/** 0.11.8: "Listeden kaldır" tek dokunuşla çalışmaz. Not yazılmadıysa ses de silinir; 06.10.2026'da elle yanlışlıkla
+ *  dokunulup bir kayıt kaybolmuştu. */
+function KaldirmaOnayi({ o, ad, kapat }: { o: Oturum; ad: string; kapat: () => void }) {
+  const yazildi = o.durum === "yazildi";
+  return (
+    <div className="onay-perde" role="dialog" aria-modal="true" aria-labelledby="kaldir-baslik" onClick={kapat}>
+      <div className="onay-kutu" onClick={(e) => e.stopPropagation()}>
+        <h2 id="kaldir-baslik">{yazildi ? "Listeden kaldırılsın mı?" : "Kayıt silinsin mi?"}</h2>
+        <p className="aciklama">
+          {saat(o.baslangic)} · {ad}
+        </p>
+        <p className="aciklama">
+          {yazildi
+            ? "Yalnız bu listeden kalkar. Obsidian'daki not yerinde durur."
+            : "Not henüz yazılmadı. Ses telefondan silinir ve bu kayıttan not çıkmaz. Geri alınamaz."}
+        </p>
+        <div className="satir-eylem">
+          <button className="dugme" onClick={() => { kapat(); void hat.kaldir(o); }}>{yazildi ? "Listeden kaldır" : "Evet, kaydı sil"}</button>
+          <button className="metin-dugme" autoFocus onClick={kapat}>Vazgeç</button>
+        </div>
+      </div>
     </div>
   );
 }

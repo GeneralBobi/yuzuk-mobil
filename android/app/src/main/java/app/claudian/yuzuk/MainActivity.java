@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
     @Override public void onPause() {
         super.onPause();
         ArkaPlanIsci.onPlanda = false;
+        TeslimServisi.baslat(this); // 0.11.8: bekleyen kayıt varsa uygulamadan çıkınca da gönderilir ve teslim alınır
         ArkaPlanIsci.hemen(this);
     }
     @Override
