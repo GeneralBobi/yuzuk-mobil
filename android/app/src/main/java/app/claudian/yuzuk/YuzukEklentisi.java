@@ -93,7 +93,8 @@ public class YuzukEklentisi extends Plugin {
     public void arkaPlanOku(PluginCall call) {
         new Thread(() -> {
             synchronized (ArkaPlanIsci.KILIT) {
-                try { call.resolve(new JSObject().put("teslimler", new JSObject(ArkaPlanIsci.depo(getContext()).getString("teslimler", "{}")))); }
+                try { call.resolve(new JSObject().put("teslimler", new JSObject(ArkaPlanIsci.depo(getContext()).getString("teslimler", "{}")))
+                        .put("yuklemeler", new JSObject(ArkaPlanIsci.depo(getContext()).getString("yuklemeler", "{}")))); }
                 catch (Exception e) { call.reject("Teslim kayıtları okunamadı"); }
             }
         }).start();
@@ -444,67 +445,90 @@ public class YuzukEklentisi extends Plugin {
 
     // ------------------------------------------------ yükleme
 
-    /** Çok parçalı form, dosya belleğe alınmadan akışla gönderilir (40 dk ≈ 14 MB). */
+    /** Çok parçalı form, dosya belleğe alınmadan akışla gönderilir (40 dk ≈ 14 MB).
+     *  0.11.8: aynı dosyayı arka plan teslimi gönderiyorsa ikinci kopya gitmez (409); başarılı yükleme kalıcı olarak
+     *  "yuklemeler"e yazılır ki uygulama kapanınca arka plan aynı kaydı yeniden yüklemesin. */
     @PluginMethod
     public void yukle(PluginCall call) {
         String yol = call.getString("yol");
         String adres = call.getString("url");
         String anahtar = call.getString("anahtar");
+        String id = call.getString("id", "");
         JSObject alanlar = call.getObject("alanlar", new JSObject());
         new Thread(() -> {
-            HttpURLConnection b = null;
+            String kanonik = new File(yol).getAbsolutePath();
+            if (!ArkaPlanIsci.YUKLENEN.add(kanonik)) {
+                JSObject r = new JSObject();
+                r.put("durum", 409);
+                r.put("govde", "{\"detail\": \"Arka planda gönderiliyor\"}");
+                call.resolve(r);
+                return;
+            }
             try {
-                File f = new File(yol);
-                if (f.length() > 95_000_000L) {  // bulutun istek sınırı: yarıda kesilmesin, açıkça söylensin
-                    JSObject r = new JSObject();
-                    r.put("durum", 413);
-                    r.put("govde", "{\"detail\": \"Dosya " + (f.length() / 1_000_000L) + " MB; bulut en çok 95 MB kabul ediyor. Videonun yalnız sesini ya da daha kısa bir parçasını gönder.\"}");
-                    call.resolve(r);
-                    return;
-                }
-                String sinir = "----yuzuk" + UUID.randomUUID().toString().replace("-", "");
-                b = (HttpURLConnection) new URL(adres).openConnection();
-                b.setRequestMethod("POST");
-                b.setDoOutput(true);
-                b.setConnectTimeout(20000);
-                b.setReadTimeout(120000);
-                b.setChunkedStreamingMode(1 << 16);
-                b.setRequestProperty("Authorization", "Bearer " + anahtar);
-                b.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + sinir);
-                try (OutputStream out = b.getOutputStream()) {
-                    Iterator<String> it = alanlar.keys();
-                    while (it.hasNext()) {
-                        String k = it.next();
-                        yaz(out, "--" + sinir + "\r\nContent-Disposition: form-data; name=\"" + k + "\"\r\n\r\n" + alanlar.getString(k) + "\r\n");
-                    }
-                    yaz(out, "--" + sinir + "\r\nContent-Disposition: form-data; name=\"ses\"; filename=\"" + f.getName()
-                            + "\"\r\nContent-Type: application/octet-stream\r\n\r\n");
-                    try (InputStream in = new FileInputStream(f)) {
-                        byte[] tampon = new byte[1 << 16];
-                        int n;
-                        while ((n = in.read(tampon)) > 0) out.write(tampon, 0, n);
-                    }
-                    yaz(out, "\r\n--" + sinir + "--\r\n");
-                }
-                int durum = b.getResponseCode();
-                InputStream govde = durum < 400 ? b.getInputStream() : b.getErrorStream();
-                StringBuilder sb = new StringBuilder();
-                if (govde != null) {
-                    try (BufferedReader r = new BufferedReader(new InputStreamReader(govde, StandardCharsets.UTF_8))) {
-                        String s;
-                        while ((s = r.readLine()) != null) sb.append(s);
-                    }
+                String[] sonuc = akisYukle(new File(yol), adres, anahtar, alanlar);
+                int durum = Integer.parseInt(sonuc[0]);
+                if (durum == 200 && !id.isEmpty()) {
+                    try { ArkaPlanIsci.yuklemeKaydet(getContext(), id, new JSONObject(sonuc[1]).optString("id")); } catch (Exception ignored) { }
                 }
                 JSObject r = new JSObject();
                 r.put("durum", durum);
-                r.put("govde", sb.toString());
+                r.put("govde", sonuc[1]);
                 call.resolve(r);
             } catch (Exception e) {
                 call.reject(e.getMessage() != null ? e.getMessage() : e.toString());
             } finally {
-                if (b != null) b.disconnect();
+                ArkaPlanIsci.YUKLENEN.remove(kanonik);
             }
         }).start();
+    }
+
+    /** Uygulama ve arka plan teslimi aynı yolu kullanır. Döner: {durum kodu, gövde}. */
+    static String[] akisYukle(File f, String adres, String anahtar, JSONObject alanlar) throws Exception {
+        if (f.length() > 95_000_000L) {  // bulutun istek sınırı: yarıda kesilmesin, açıkça söylensin
+            return new String[]{"413", "{\"detail\": \"Dosya " + (f.length() / 1_000_000L) + " MB; bulut en çok 95 MB kabul ediyor. Videonun yalnız sesini ya da daha kısa bir parçasını gönder.\"}"};
+        }
+        HttpURLConnection b = null;
+        try {
+            String sinir = "----yuzuk" + UUID.randomUUID().toString().replace("-", "");
+            b = (HttpURLConnection) new URL(adres).openConnection();
+            b.setRequestMethod("POST");
+            b.setDoOutput(true);
+            b.setConnectTimeout(20000);
+            b.setReadTimeout(120000);
+            b.setChunkedStreamingMode(1 << 16);
+            b.setRequestProperty("Authorization", "Bearer " + anahtar);
+            b.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + sinir);
+            // 0.11.8: bulut yükleme süresini dosya boyuna göre ayarlar (akışlı gövdede Content-Length yok).
+            b.setRequestProperty("X-Yuzuk-Boyut", String.valueOf(f.length()));
+            b.setRequestProperty("X-Yuzuk-Surum", BuildConfig.VERSION_NAME);
+            try (OutputStream out = b.getOutputStream()) {
+                Iterator<String> it = alanlar.keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    yaz(out, "--" + sinir + "\r\nContent-Disposition: form-data; name=\"" + k + "\"\r\n\r\n" + alanlar.getString(k) + "\r\n");
+                }
+                yaz(out, "--" + sinir + "\r\nContent-Disposition: form-data; name=\"ses\"; filename=\"" + f.getName()
+                        + "\"\r\nContent-Type: application/octet-stream\r\n\r\n");
+                try (InputStream in = new FileInputStream(f)) {
+                    byte[] tampon = new byte[1 << 16];
+                    int n;
+                    while ((n = in.read(tampon)) > 0) out.write(tampon, 0, n);
+                }
+                yaz(out, "\r\n--" + sinir + "--\r\n");
+            }
+            int durum = b.getResponseCode();
+            InputStream govde = durum < 400 ? b.getInputStream() : b.getErrorStream();
+            StringBuilder sb = new StringBuilder();
+            if (govde != null) {
+                try (BufferedReader r = new BufferedReader(new InputStreamReader(govde, StandardCharsets.UTF_8))) {
+                    String s;
+                    while ((s = r.readLine()) != null) sb.append(s);
+                }
+            }
+            return new String[]{String.valueOf(durum), sb.toString()};
+        } finally {
+            if (b != null) b.disconnect();
+        }
     }
 
     private static void yaz(OutputStream out, String s) throws java.io.IOException {

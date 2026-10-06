@@ -23,8 +23,9 @@ export interface ModelDurumu { hazir: boolean; indiriliyor: boolean; indirilen: 
 
 export interface YuzukEklentisi {
   googleGiris(o: { clientId: string; nonce: string }): Promise<{ idToken: string }>;
-  arkaPlanKur(o: { ayar: { sunucu: string; anahtar: string; vault: string; altKlasor: string; isler: OturumArkaPlan[] } }): Promise<void>;
-  arkaPlanOku(): Promise<{ teslimler: Record<string, { id: string; sunucuId: string; yol: string; hash: string; baslik: string; mahrem: number; yazici: string }> }>;
+  arkaPlanKur(o: { ayar: { sunucu: string; anahtar: string; vault: string; altKlasor: string; yazici: string; isler: OturumArkaPlan[]; gonderilecek: OturumArkaPlan[] } }): Promise<void>;
+  /** yuklemeler: 0.11.8 — arka planda (ya da uygulamanın kendi yüklemesinde) buluta kabul edilen kayıtlar, yerel id → bulut iş id. */
+  arkaPlanOku(): Promise<{ teslimler: Record<string, { id: string; sunucuId: string; yol: string; hash: string; baslik: string; mahrem: number; yazici: string }>; yuklemeler?: Record<string, string> }>;
   arkaPlanOnayla(o: { ids: string[] }): Promise<void>;
   canliBaslat(o: { sunucu: string; anahtar: string; dil?: string; testPcm?: string }): Promise<{ dokum: string }>;
   canliDurdur(): Promise<{ dokum: string | null; sureSn: number }>;
@@ -41,7 +42,7 @@ export interface YuzukEklentisi {
   dosyaSec(): Promise<{ yol: string | null; ad: string | null }>;
   dosyaVarMi(o: { yol: string }): Promise<{ var: boolean }>;
   dosyaSil(o: { yol: string }): Promise<void>;
-  yukle(o: { yol: string; url: string; anahtar: string; alanlar: Record<string, string> }): Promise<{ durum: number; govde: string }>;
+  yukle(o: { yol: string; url: string; anahtar: string; alanlar: Record<string, string>; id?: string }): Promise<{ durum: number; govde: string }>;
   klasorSec(): Promise<{ agac: string | null; ad: string | null; obsidian?: boolean }>;
   /** 0.11.1: seçili klasör vault kökü mü (.obsidian var mı). */
   vaultMi(o: { agac: string }): Promise<{ obsidian: boolean }>;

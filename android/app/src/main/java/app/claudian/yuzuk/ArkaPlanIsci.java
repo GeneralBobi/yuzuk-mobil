@@ -28,19 +28,39 @@ import java.util.concurrent.TimeUnit;
  * Notlar yalnız kullanıcının seçtiği SAF vault'una, küçük teslim makbuzu uygulamanın özel deposuna yazılır. */
 public class ArkaPlanIsci extends Worker {
     static final Object KILIT = new Object();
+    /** 0.11.8: aynı anda tek teslim turu (WorkManager ya da TeslimServisi). KILIT yalnız depo okuma/yazmayı korur;
+     *  ağ beklenirken tutulmaz, uygulamanın köprü çağrıları turun bitmesini beklemez. */
+    static final java.util.concurrent.locks.ReentrantLock CALISMA = new java.util.concurrent.locks.ReentrantLock();
+    /** Şu an yüklenen ses dosyaları (uygulama ya da arka plan): aynı kayıt iki kez gönderilmez. */
+    static final Set<String> YUKLENEN = Collections.synchronizedSet(new HashSet<>());
     static volatile boolean onPlanda;
+    /** Son turda kayıt gönderilemedi (bilgisayar kapalı/pilde, bağlantı yok): servis daha seyrek dener. */
+    static volatile boolean engel;
     static final String DEPO = "yuzuk_arka_plan";
     static SharedPreferences depo(Context c) { return c.getSharedPreferences(DEPO, Context.MODE_PRIVATE); }
     public ArkaPlanIsci(@NonNull Context c, @NonNull WorkerParameters p) { super(c, p); }
+
+    interface Durum { void yaz(String metin); }
 
     static void kur(Context c, JSONObject ayar) throws Exception {
         synchronized (KILIT) {
             String eski = depo(c).getString("ayar", "{}");
             JSONObject e = new JSONObject(eski);
             SharedPreferences.Editor yaz = depo(c).edit().putString("ayar", ayar.toString());
-            if (!e.optString("anahtar").equals(ayar.optString("anahtar"))
+            boolean hesapDegisti = !e.optString("anahtar").equals(ayar.optString("anahtar"))
                     || !e.optString("sunucu").equals(ayar.optString("sunucu"))
-                    || !e.optString("vault").equals(ayar.optString("vault"))) yaz.remove("teslimler");
+                    || !e.optString("vault").equals(ayar.optString("vault"));
+            if (hesapDegisti) yaz.remove("teslimler").remove("yuklemeler");
+            else {
+                // Uygulama arka planda yüklenen kaydı kendi listesine işledikten sonra (artık "gönderilecek" değil)
+                // yükleme makbuzu düşer; işlenmeden düşerse aynı kayıt ikinci kez yüklenebilirdi.
+                JSONObject y = new JSONObject(depo(c).getString("yuklemeler", "{}")), kalan = new JSONObject();
+                Set<String> bekleyen = new HashSet<>();
+                JSONArray g = ayar.optJSONArray("gonderilecek");
+                for (int n = 0; g != null && n < g.length(); n++) bekleyen.add(g.getJSONObject(n).optString("id"));
+                for (Iterator<String> it = y.keys(); it.hasNext();) { String k = it.next(); if (bekleyen.contains(k)) kalan.put(k, y.get(k)); }
+                yaz.putString("yuklemeler", kalan.toString());
+            }
             if (!yaz.commit()) throw new IOException("arka plan ayarı yazılamadı");
         }
         WorkManager wm = WorkManager.getInstance(c);
@@ -60,29 +80,117 @@ public class ArkaPlanIsci extends Worker {
                 new OneTimeWorkRequest.Builder(ArkaPlanIsci.class).setInitialDelay(20, TimeUnit.SECONDS).setConstraints(kosul).build());
     }
 
+    static void yuklemeKaydet(Context c, String yerelId, String sunucuId) throws Exception {
+        if (!sunucuId.matches("[0-9a-f]{32}")) return;
+        synchronized (KILIT) {
+            JSONObject y = new JSONObject(depo(c).getString("yuklemeler", "{}"));
+            y.put(yerelId, sunucuId);
+            if (!depo(c).edit().putString("yuklemeler", y.toString()).commit()) throw new IOException("yükleme makbuzu yazılamadı");
+        }
+    }
+
+    /** Uygulamanın listesinde arka planda iş bekliyor mu (gönderilecek kayıt ya da sonucu beklenen iş). */
+    static boolean bekleyenVar(Context c) {
+        try {
+            JSONObject a = new JSONObject(depo(c).getString("ayar", "{}"));
+            if (a.optString("anahtar").isEmpty() || a.optString("vault").isEmpty()) return false;
+            JSONArray g = a.optJSONArray("gonderilecek"), i = a.optJSONArray("isler");
+            return (g != null && g.length() > 0) || (i != null && i.length() > 0);
+        } catch (Exception e) { return false; }
+    }
+
     @NonNull @Override public Result doWork() {
         Context c = getApplicationContext();
-        long son = android.os.SystemClock.elapsedRealtime() + 7 * 60_000L;
+        if (onPlanda || isStopped()) return Result.success();
+        if (!CALISMA.tryLock()) return Result.success(); // TeslimServisi zaten çalışıyor
+        try {
+            tur(c, android.os.SystemClock.elapsedRealtime() + 7 * 60_000L, () -> isStopped() || onPlanda, m -> { });
+            return Result.success();
+        } catch (Exception e) { return Result.retry(); }
+        finally { CALISMA.unlock(); }
+    }
+
+    /** Bir teslim turu (0.11.8). Telefonda bekleyen kayıtları buluta yükler, sonucu hazır olanları Obsidian'a yazar,
+     *  hatırlatıcıları çeker. Döner: hâlâ bekleyen iş sayısı; ayar yoksa -1. Çağıran CALISMA kilidini tutar. */
+    static int tur(Context c, long son, java.util.function.BooleanSupplier dur, Durum durum) throws Exception {
+        JSONObject a, teslimler, yuklemeler;
         synchronized (KILIT) {
-            if (onPlanda || isStopped()) return Result.success();
+            a = new JSONObject(depo(c).getString("ayar", "{}"));
+            teslimler = new JSONObject(depo(c).getString("teslimler", "{}"));
+            yuklemeler = new JSONObject(depo(c).getString("yuklemeler", "{}"));
+        }
+        if (a.optString("anahtar").isEmpty() || !a.optString("sunucu").startsWith("https://")) return -1;
+        YuzukMesajServisi.kaydet(c); // push anahtarı ilk denemede gidemediyse burada yeniden denenir
+        int bekleyen = 0;
+        for (Iterator<String> it = teslimler.keys(); it.hasNext() && !dur.getAsBoolean() && android.os.SystemClock.elapsedRealtime() < son;) {
+            try { istek(a, "/v1/oturum/" + it.next(), "DELETE"); } catch (Exception ignored) { }
+        }
+        // 1) Telefonda bekleyen kayıtlar: uygulama kapalıyken de gönderilir (06.10.2026: kayıt durdurulup uygulamadan
+        //    çıkılınca bilgisayar açık olduğu hâlde uygulama yeniden açılana kadar hiçbir şey gitmiyordu).
+        JSONArray gon = a.optJSONArray("gonderilecek");
+        engel = false;
+        // Büyük kayıt akıtılmadan önce bulut sorulur (D1'den, düğüme gitmeden): bilgisayar kapalıyken ya da pildeyken
+        // 40 MB her turda baştan yüklenmez. 401/403 kalıcıdır (eşleşme iptal): tur kaydı bekletmez, servis kapanır.
+        int yuklenecek = 0;
+        for (int n = 0; gon != null && n < gon.length(); n++) if (!yuklemeler.has(gon.getJSONObject(n).optString("id"))) yuklenecek++;
+        boolean gonder = true;
+        if (yuklenecek > 0) {
+            int k = kabulKodu(a);
+            if (k == 401 || k == 403) gonder = false;
+            else if (k != 200 && k != 404) { gonder = false; engel = true; bekleyen += yuklenecek; durum.yaz("Bilgisayar hazır değil; kayıt telefonda bekliyor"); }
+        }
+        for (int n = 0; gonder && gon != null && n < gon.length(); n++) {
+            JSONObject g = gon.getJSONObject(n);
+            String lid = g.optString("id");
+            if (lid.isEmpty() || yuklemeler.has(lid)) continue;
+            File f = new File(g.optString("yol"));
+            if (!f.isFile()) continue;
+            if (dur.getAsBoolean() || android.os.SystemClock.elapsedRealtime() >= son) { bekleyen++; continue; }
+            String kanonik = f.getAbsolutePath();
+            if (!YUKLENEN.add(kanonik)) { bekleyen++; continue; } // uygulama şu an gönderiyor
             try {
-                JSONObject a = new JSONObject(depo(c).getString("ayar", "{}"));
-                if (a.optString("anahtar").isEmpty() || !a.optString("sunucu").startsWith("https://")) return Result.success();
-                YuzukMesajServisi.kaydet(c); // push anahtarı ilk denemede gidemediyse burada yeniden denenir
-                JSONArray jobs = a.optJSONArray("isler");
-                JSONObject teslimler = new JSONObject(depo(c).getString("teslimler", "{}"));
-                for (Iterator<String> it = teslimler.keys(); it.hasNext() && !isStopped() && !onPlanda && android.os.SystemClock.elapsedRealtime() < son;) {
-                    try { istek(a, "/v1/oturum/" + it.next(), "DELETE"); } catch (Exception ignored) { }
+                durum.yaz("Kayıt buluta gönderiliyor");
+                JSONObject alanlar = new JSONObject().put("baslangic", g.optString("baslangic")).put("yazici", a.optString("yazici", "claude"));
+                if (!g.optString("baslik").isEmpty()) alanlar.put("baslik", g.optString("baslik"));
+                String[] r = YuzukEklentisi.akisYukle(f, a.getString("sunucu").replaceAll("/+$", "") + "/v1/oturum", a.getString("anahtar"), alanlar);
+                if ("200".equals(r[0])) {
+                    String sid = new JSONObject(r[1]).optString("id");
+                    yuklemeKaydet(c, lid, sid);
+                    yuklemeler.put(lid, sid);
+                } else if (!"413".equals(r[0]) && !"415".equals(r[0]) && !"401".equals(r[0]) && !"403".equals(r[0])) {
+                    bekleyen++; engel = true; // 413/415/401/403: tekrar düzeltmez, uygulama gösterir
                 }
-                if (jobs != null) for (int n = 0; n < jobs.length() && !isStopped() && !onPlanda && android.os.SystemClock.elapsedRealtime() < son; n++) {
-                    JSONObject o = jobs.getJSONObject(n);
+            } catch (Exception e) {
+                bekleyen++; engel = true; // bağlantı yok ya da bilgisayar kapalı: ses telefonda kalır
+            } finally {
+                YUKLENEN.remove(kanonik);
+            }
+        }
+        // 2) Bulutta kabul edilmiş işler: uygulamanın gönderdikleri ve az önce arka planda gönderilenler.
+        List<JSONObject> takip = new ArrayList<>();
+        JSONArray jobs = a.optJSONArray("isler");
+        for (int n = 0; jobs != null && n < jobs.length(); n++) takip.add(jobs.getJSONObject(n));
+        for (int n = 0; gon != null && n < gon.length(); n++) {
+            JSONObject g = gon.getJSONObject(n);
+            if (yuklemeler.has(g.optString("id"))) takip.add(new JSONObject(g.toString()).put("sunucuId", yuklemeler.getString(g.optString("id"))));
+        }
+        for (JSONObject o : takip) {
+            if (dur.getAsBoolean() || android.os.SystemClock.elapsedRealtime() >= son) { bekleyen++; continue; }
+            {
+                {
                     String id = o.optString("sunucuId");
                     if (!id.matches("[0-9a-f]{32}")) continue;
                     // Kalıcı makbuz varsa not yeniden yazılmaz; DELETE bir önceki çalışmada kesilmiş olabilir.
                     if (teslimler.has(id)) { try { istek(a, "/v1/oturum/" + id, "DELETE"); } catch (Exception ignored) { } continue; }
                     try {
                         JSONObject j = new JSONObject(istek(a, "/v1/oturum/" + id, "GET"));
-                        if (!"hazir".equals(j.optString("durum")) || !j.has("sonuc")) continue;
+                        String d = j.optString("durum");
+                        if ("hata".equals(d)) continue; // uygulama açılınca gösterir ve kendiliğinden bir kez yeniden dener
+                        if (!"hazir".equals(d) || !j.has("sonuc")) {
+                            bekleyen++;
+                            durum.yaz("not yaziliyor".equals(j.optString("asama")) ? "Not yazılıyor" : "Kayıt bilgisayarda işleniyor");
+                            continue;
+                        }
                         JSONObject s = j.getJSONObject("sonuc");
                         String md = s.optString("not_md").trim();
                         String yol = "", hash = "";
@@ -107,16 +215,36 @@ public class ArkaPlanIsci extends Worker {
                                 .put("mahrem", s.optInt("mahrem", 0)).put("yazici", s.optString("yazici"));
                         teslimler.put(id, makbuz);
                         // Ses ya da sunucudaki sonuç ancak başarılı SAF yazısı ve kalıcı makbuzdan sonra silinir.
-                        if (!depo(c).edit().putString("teslimler", teslimler.toString()).commit()) throw new IOException("makbuz yazılamadı");
+                        synchronized (KILIT) {
+                            JSONObject t = new JSONObject(depo(c).getString("teslimler", "{}"));
+                            t.put(id, makbuz);
+                            if (!depo(c).edit().putString("teslimler", t.toString()).commit()) throw new IOException("makbuz yazılamadı");
+                        }
                         sesSil(c, o.optString("yol"));
                         try { istek(a, "/v1/oturum/" + id, "DELETE"); } catch (Exception ignored) { }
                         bildir(c, id, makbuz.optString("baslik"), yol.isEmpty() ? "Not alınacak konuşma bulunamadı." : "Obsidian'a yazıldı.");
-                    } catch (Exception ignored) { /* Sonuç ve telefondaki ses kalır; bir sonraki iş yeniden dener. */ }
+                    } catch (Exception e) {
+                        bekleyen++; /* Sonuç ve telefondaki ses kalır; bir sonraki tur yeniden dener. */
+                    }
                 }
-                hatirlaticilariCek(c, a);
-                return Result.success();
-            } catch (Exception e) { return Result.retry(); }
+            }
         }
+        try { hatirlaticilariCek(c, a); } catch (Exception ignored) { }
+        return bekleyen;
+    }
+
+    /** GET /v1/kabul durum kodu; ağ yoksa -1. */
+    static int kabulKodu(JSONObject a) {
+        HttpURLConnection h = null;
+        try {
+            h = (HttpURLConnection) new URL(a.getString("sunucu").replaceAll("/+$", "") + "/v1/kabul").openConnection();
+            h.setConnectTimeout(10_000); h.setReadTimeout(20_000); h.setInstanceFollowRedirects(false);
+            h.setRequestProperty("Authorization", "Bearer " + a.getString("anahtar"));
+            h.setRequestProperty("X-Yuzuk-Surum", BuildConfig.VERSION_NAME);
+            return h.getResponseCode();
+        } catch (Exception e) {
+            return -1;
+        } finally { if (h != null) h.disconnect(); }
     }
 
     static String istek(JSONObject a, String yol, String method) throws Exception {

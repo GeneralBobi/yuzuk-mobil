@@ -41,6 +41,7 @@ export interface Oturum {
   yazan?: string; // notu yazan araç (yedeğe geçtiyse o)
   yedek?: string; // seçilen ama çalışmayan araç
   mahrem?: number; // mahrem sayılıp nota gönderilmeyen cümle sayısı (görünür olsun diye)
+  otoTekrar?: number; // 0.11.8: hata sonrası kendiliğinden yeniden gönderildi (bir kez)
 }
 
 export interface SesIzi {
@@ -156,9 +157,14 @@ class Hat {
   private sakla() {
     localStorage.setItem("oturumlar", JSON.stringify(this.oturumlar));
     localStorage.setItem("ayarlar", JSON.stringify(this.ayarlar));
+    // 0.11.8: telefonda bekleyen ses kayıtları da arka plana verilir; uygulamadan çıkınca TeslimServisi onları yükler.
+    // Canlı not kaydı (döküm) uygulama açıkken gider.
     const ayar = { sunucu: this.ayarlar.sunucu, anahtar: this.ayarlar.anahtar, vault: this.ayarlar.vault ?? "",
-      altKlasor: this.ayarlar.altKlasor || "Yüzük", isler: this.oturumlar.filter(o => o.durum === "sunucuda").map(o =>
-        ({ id: o.id, sunucuId: o.sunucuId, yol: o.yol, baslangic: o.baslangic, baslik: o.baslik })) };
+      altKlasor: this.ayarlar.altKlasor || "Yüzük", yazici: this.ayarlar.yazici || "claude",
+      isler: this.oturumlar.filter(o => o.durum === "sunucuda").map(o =>
+        ({ id: o.id, sunucuId: o.sunucuId, yol: o.yol, baslangic: o.baslangic, baslik: o.baslik })),
+      gonderilecek: this.oturumlar.filter(o => (o.durum === "yerel" || o.durum === "gonderiliyor") && o.kaynak !== "canli").map(o =>
+        ({ id: o.id, yol: o.yol, baslangic: o.baslangic, baslik: o.baslik })) };
     this.arkaKur = this.arkaKur.then(async () => {
       await yerel.arkaPlanKur({ ayar });
       if (this.arkaPlanHatasi) { this.arkaPlanHatasi = null; this.yayinla(); }
@@ -767,6 +773,18 @@ class Hat {
   async arkaPlanTeslimleriniAl() {
     const r = await yerel.arkaPlanOku().catch(() => null);
     if (!r) return;
+    // 0.11.8: önce arka planda buluta kabul edilen kayıtlar işlenir; teslim makbuzu bulut iş kimliğiyle eşleşir.
+    let yuklendi = false;
+    for (const [yerelId, sunucuId] of Object.entries(r.yuklemeler ?? {})) {
+      const o = this.oturumlar.find(o => o.id === yerelId && (o.durum === "yerel" || o.durum === "gonderiliyor"));
+      if (!o || !/^[0-9a-f]{32}$/.test(sunucuId)) continue;
+      o.sunucuId = sunucuId;
+      o.durum = "sunucuda";
+      o.asama = "Sırada";
+      o.hata = undefined;
+      yuklendi = true;
+    }
+    if (yuklendi) this.sakla();
     const ids: string[] = [];
     const iz: Record<string, string> = oku("esitleme-izi", {});
     for (const [id, t] of Object.entries(r.teslimler)) {
@@ -868,11 +886,28 @@ class Hat {
     if (o.kaynak === "canli") return this.dokumGonder(o);
     o.durum = "gonderiliyor";
     o.hata = undefined;
+    o.asama = undefined;
     this.yayinla();
     try {
+      // 0.11.8: kayıt akıtılmadan önce bulut sorulur; bilgisayar kapalı ya da pildeyse ses her denemede baştan yüklenmez.
+      const k = await agIstek(`${this.ayarlar.sunucu}/v1/kabul`, { headers: this.basliklar }, 20_000);
+      if (!k.ok && k.status !== 404) {
+        const j = await k.json().catch(() => ({}));
+        o.durum = "yerel";
+        o.hata = `Gönderilemedi — ${j.detail ?? `Bulut ${k.status}`}`;
+        this.sakla();
+        return;
+      }
       const alanlar: Record<string, string> = { baslangic: o.baslangic, yazici: this.ayarlar.yazici || "claude" };
       if (o.baslik) alanlar.baslik = o.baslik;
-      const r = await yerel.yukle({ yol: o.yol, url: `${this.ayarlar.sunucu}/v1/oturum`, anahtar: this.ayarlar.anahtar, alanlar });
+      const r = await yerel.yukle({ yol: o.yol, url: `${this.ayarlar.sunucu}/v1/oturum`, anahtar: this.ayarlar.anahtar, alanlar, id: o.id });
+      if (r.durum === 409) {
+        // 0.11.8: arka plan teslimi bu kaydı şu an gönderiyor; bitince makbuzu arkaPlanTeslimleriniAl işler.
+        o.durum = "yerel";
+        o.asama = "Arka planda gönderiliyor";
+        this.sakla();
+        return;
+      }
       if (r.durum !== 200) {
         let neden = r.govde.slice(0, 160);
         try {
@@ -938,8 +973,20 @@ class Hat {
         o.hata = undefined;
         await yerel.dosyaSil({ yol: o.yol }).catch(() => undefined); // not yazıldı: ses hiçbir yerde kalmaz
       } else if (j.durum === "hata") {
-        o.durum = "hata";
-        o.hata = j.hata ?? "Sunucuda hata";
+        // 0.11.8: bilgisayar iş ortasında kapandıysa ya da motor yeniden başladıysa kayıt telefonda durur; bir kez
+        // kendiliğinden yeniden gönderilir (06.10.2026: üç kayıt "kaydı tekrar gönder" hatasında elle beklemişti).
+        const sesVar = !o.otoTekrar && o.kaynak !== "canli" && (await yerel.dosyaVarMi({ yol: o.yol }).catch(() => ({ var: false }))).var;
+        if (sesVar) {
+          await agIstek(`${this.ayarlar.sunucu}/v1/oturum/${o.sunucuId}`, { method: "DELETE", headers: this.basliklar }).catch(() => undefined);
+          o.otoTekrar = 1;
+          o.sunucuId = undefined;
+          o.durum = "yerel";
+          o.asama = undefined;
+          o.hata = undefined;
+        } else {
+          o.durum = "hata";
+          o.hata = j.hata ?? "Sunucuda hata";
+        }
       } else {
         o.asama = ASAMA[j.asama ?? j.durum] ?? j.durum;
         o.hata = undefined;
