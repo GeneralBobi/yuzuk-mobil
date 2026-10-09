@@ -638,6 +638,40 @@ public class YuzukEklentisi extends Plugin {
 
     // ------------------------------------------------ vault eşitleme
 
+    /** 0.11.9: eşitleme izi uygulama ve arka plan arasında ortak (önceden WebView'ın localStorage'ındaydı). */
+    @PluginMethod
+    public void esitlemeIzi(PluginCall call) {
+        new Thread(() -> {
+            try {
+                android.content.SharedPreferences d = ArkaPlanIsci.depo(getContext());
+                JSObject r = new JSObject();
+                r.put("iz", new JSObject(d.getString("esitleme_izi", "{}")));
+                r.put("varmi", d.contains("esitleme_izi"));
+                r.put("gerek", d.getBoolean("esitleme_gerek", false));
+                r.put("zaman", d.getLong("esitleme_zaman", 0));
+                r.put("metin", d.getString("esitleme_metin", ""));
+                call.resolve(r);
+            } catch (Exception e) { call.reject("eşitleme izi okunamadı"); }
+        }).start();
+    }
+
+    @PluginMethod
+    public void esitlemeIziYaz(PluginCall call) {
+        new Thread(() -> {
+            try {
+                VaultEsitleme.izYaz(getContext(), call.getObject("iz", new JSObject()), Boolean.TRUE.equals(call.getBoolean("tamam", false)), call.getString("metin", ""));
+                call.resolve();
+            } catch (Exception e) { call.reject("eşitleme izi yazılamadı"); }
+        }).start();
+    }
+
+    /** al=true: arka plan eşitlemiyorsa kilidi alır (alindi=true); al=false: bırakır. */
+    @PluginMethod
+    public void esitlemeKilit(PluginCall call) {
+        if (Boolean.TRUE.equals(call.getBoolean("al", true))) call.resolve(sonuc("alindi", VaultEsitleme.MESGUL.tryAcquire()));
+        else { VaultEsitleme.MESGUL.release(); call.resolve(); }
+    }
+
     /** Vault'taki .md ve .canvas dosyaları: {yol, boyut, mtime}. Gizli klasörler (.obsidian, .trash…) dışarıda. */
     @PluginMethod
     public void vaultListe(PluginCall call) {

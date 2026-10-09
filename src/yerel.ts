@@ -27,6 +27,10 @@ export interface YuzukEklentisi {
   /** yuklemeler: 0.11.8 — arka planda (ya da uygulamanın kendi yüklemesinde) buluta kabul edilen kayıtlar, yerel id → bulut iş id. */
   arkaPlanOku(): Promise<{ teslimler: Record<string, { id: string; sunucuId: string; yol: string; hash: string; baslik: string; mahrem: number; yazici: string }>; yuklemeler?: Record<string, string> }>;
   arkaPlanOnayla(o: { ids: string[] }): Promise<void>;
+  /** 0.11.9: eşitleme izi uygulama ve arka plan arasında ortak; gerek: arka planda not geldi, eşitleme bekliyor. */
+  esitlemeIzi(): Promise<{ iz: Record<string, string>; varmi: boolean; gerek: boolean; zaman: number; metin: string }>;
+  esitlemeIziYaz(o: { iz: Record<string, string>; tamam?: boolean; metin?: string }): Promise<void>;
+  esitlemeKilit(o: { al: boolean }): Promise<{ alindi?: boolean }>;
   canliBaslat(o: { sunucu: string; anahtar: string; dil?: string; testPcm?: string }): Promise<{ dokum: string }>;
   canliDurdur(): Promise<{ dokum: string | null; sureSn: number }>;
   canliDurumu(): Promise<CanliDurum>;

@@ -224,6 +224,7 @@ class Hat {
     if (r.agac !== this.ayarlar.vault) {
       // Kök değişti: eski izler başka yollara aitti.
       localStorage.removeItem("esitleme-izi");
+      void yerel.esitlemeIziYaz({ iz: {} }).catch(() => undefined);
       this.esitleme = { durum: "yok", metin: "" };
       localStorage.setItem("esitleme", JSON.stringify(this.esitleme));
     }
@@ -255,6 +256,21 @@ class Hat {
   async esitle() {
     const agac = this.ayarlar.vault;
     if (!agac || !this.ayarlar.anahtar || this.esitleme.durum === "calisiyor") return;
+    // 0.11.9: arka plan (TeslimServisi) o an eşitliyorsa ikinci eşitleme başlamaz; bitince sonucu görünür.
+    const kilit = await yerel.esitlemeKilit({ al: true }).catch(() => null);
+    if (kilit && !kilit.alindi) {
+      this.esitleme = { ...this.esitleme, metin: "Arka planda eşitleniyor…" };
+      this.yayinla();
+      return;
+    }
+    try {
+      await this.esitleKilitli(agac);
+    } finally {
+      if (kilit) await yerel.esitlemeKilit({ al: false }).catch(() => undefined);
+    }
+  }
+
+  private async esitleKilitli(agac: string) {
     const guncelle = (e: Partial<Hat["esitleme"]>) => {
       this.esitleme = { ...this.esitleme, ...e };
       localStorage.setItem("esitleme", JSON.stringify(this.esitleme));
@@ -267,7 +283,7 @@ class Hat {
     guncelle({ durum: "calisiyor", metin: "Bilgisayardaki notlar okunuyor…" });
     const kok = `${this.ayarlar.sunucu}/v1/vault`;
     const surum = "surum=3"; // 0.11.2: bulut eşitlemeyi yalnız kökü denetleyen ve silmeyi taşıyan sürüme açar
-    const iz: Record<string, string> = oku("esitleme-izi", {});
+    const iz = await this.izOku();
     const yeniIz: Record<string, string> = {};
     try {
       const r = await agIstek(`${kok}/liste?${surum}`, { headers: this.basliklar });
@@ -335,7 +351,9 @@ class Hat {
           else { await gonder(yol, t.icerik); yeniIz[yol] = t.sha; }
         }
       }
-      localStorage.setItem("esitleme-izi", JSON.stringify(yeniIz));
+      const sonucMetni = [say.indirilen + say.gonderilen ? `${say.indirilen} geldi, ${say.gonderilen} gitti.` : "İki taraf aynı.",
+        say.silinen ? `${say.silinen} silindi.` : ""].filter(Boolean).join(" ");
+      await this.izYaz(yeniIz, true, sonucMetni);
       const enYeni = (m: Map<string, { mtime: number }>) => Math.max(0, ...[...m.values()].map((d) => d.mtime));
       guncelle({ durum: "bitti", son: new Date().toISOString(),
         metin: [say.indirilen + say.gonderilen ? `${say.indirilen} geldi, ${say.gonderilen} gitti.` : "İki taraf aynı.",
@@ -343,7 +361,7 @@ class Hat {
           say.atlanan ? `${say.atlanan} kopya gönderilmedi.` : ""].filter(Boolean).join(" "),
         ozet: { pc: pc.size, tel: tel.size, pcEnYeni: enYeni(pc), telEnYeni: enYeni(tel), ...say } });
     } catch (e) {
-      localStorage.setItem("esitleme-izi", JSON.stringify({ ...iz, ...yeniIz }));
+      await this.izYaz({ ...iz, ...yeniIz });
       guncelle({ durum: "hata", metin: (e as Error).message });
     }
   }
@@ -786,7 +804,7 @@ class Hat {
     }
     if (yuklendi) this.sakla();
     const ids: string[] = [];
-    const iz: Record<string, string> = oku("esitleme-izi", {});
+    const iz = await this.izOku();
     for (const [id, t] of Object.entries(r.teslimler)) {
       const o = this.oturumlar.find(o => o.id === t.id && o.sunucuId === id);
       if (!o) continue;
@@ -801,7 +819,7 @@ class Hat {
       ids.push(id);
     }
     if (!ids.length) return;
-    localStorage.setItem("esitleme-izi", JSON.stringify(iz));
+    await this.izYaz(iz);
     this.sakla();
     await yerel.arkaPlanOnayla({ ids }).catch(() => undefined);
   }
@@ -1016,9 +1034,9 @@ class Hat {
         if (r.ok) {
           const icerik = await r.text();
           await yerel.dosyaYaz({ agac, yol, icerik, ekle: false });
-          const iz: Record<string, string> = oku("esitleme-izi", {});
+          const iz = await this.izOku();
           iz[yol] = await this.sha(icerik);
-          localStorage.setItem("esitleme-izi", JSON.stringify(iz));
+          await this.izYaz(iz);
           return;
         }
       }
@@ -1032,6 +1050,34 @@ class Hat {
     } catch (e) {
       throw new Error(`Telefona yazılamadı — ${(e as Error).message}`);
     }
+  }
+
+  /** 0.11.9: iz yerel depoda (arka plan da okur). İlk açılışta eski localStorage izi bir kez taşınır. */
+  private async izOku(): Promise<Record<string, string>> {
+    const r = await yerel.esitlemeIzi().catch(() => null);
+    if (!r) return oku("esitleme-izi", {});
+    if (!r.varmi) {
+      const eski: Record<string, string> = oku("esitleme-izi", {});
+      if (Object.keys(eski).length) await yerel.esitlemeIziYaz({ iz: eski }).catch(() => undefined);
+      return eski;
+    }
+    return r.iz;
+  }
+
+  private async izYaz(iz: Record<string, string>, tamam = false, metin?: string) {
+    await yerel.esitlemeIziYaz({ iz, tamam, metin }).catch(() => localStorage.setItem("esitleme-izi", JSON.stringify(iz)));
+  }
+
+  /** 0.11.9 (09.10.2026, Boran): açılışta ve öne gelişte. Arka plan eşitlediyse sonucu gösterilir; arka planda not
+   *  gelip eşitleme yapılamadıysa (bilgisayar o an kapalıydı, uygulama öne geldi) 30 dakikayı beklemeden eşitlenir. */
+  async esitlemeGerekirse() {
+    const r = await yerel.esitlemeIzi().catch(() => null);
+    if (r?.zaman && (!this.esitleme.son || r.zaman > Date.parse(this.esitleme.son))) {
+      this.esitleme = { ...this.esitleme, durum: "bitti", son: new Date(r.zaman).toISOString(), metin: r.metin || this.esitleme.metin };
+      localStorage.setItem("esitleme", JSON.stringify(this.esitleme));
+      this.yayinla();
+    }
+    await this.otoEsitle(r?.gerek ? 0 : 30);
   }
 
   /** 0.11.4: eşitleme kendiliğinden de çalışır — not yazılınca ve uygulama açılınca (en sık `aralikDk` dakikada bir).

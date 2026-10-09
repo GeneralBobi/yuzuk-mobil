@@ -68,7 +68,7 @@ export function Uygulama() {
   const [akis, setAkis] = useState<Akis>(null);
 
   useEffect(() => {
-    void hat.baslat().then(() => hat.otoEsitle());
+    void hat.baslat().then(() => hat.esitlemeGerekirse());
     // Sistem çubuğu boşlukları sayfa hazırken yeniden yazılsın (üç tuşlu gezinmede alt menü boşluk bırakıyordu).
     void yerel.kenarlariYenile().catch(() => undefined);
     const linkIsle = (url?: string | null) => {
@@ -81,10 +81,10 @@ export function Uygulama() {
     void CapApp.getLaunchUrl().then((r) => linkIsle(r?.url));
     const dinleyici = CapApp.addListener("appUrlOpen", (e) => linkIsle(e.url));
     const on = CapApp.addListener("resume", () => {
-      void hat.ilerlet();
       void hat.baglantiDene();
       void hat.hatirlaticiCek();
-      void hat.otoEsitle();
+      // Arka plan teslimleri önce işlenir (ilerlet), sonra gerekirse beklemeden eşitlenir.
+      void hat.ilerlet().then(() => hat.esitlemeGerekirse());
     });
     // Bilgisayardaki hatırlatıcılar uygulama açıkken 15 dakikada bir yeniden okunur; kurulu alarmlar kapalıyken de çalar.
     const yoklama = window.setInterval(() => void hat.hatirlaticiCek(), 15 * 60e3);

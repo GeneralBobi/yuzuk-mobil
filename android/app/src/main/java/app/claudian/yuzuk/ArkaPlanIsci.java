@@ -50,7 +50,7 @@ public class ArkaPlanIsci extends Worker {
             boolean hesapDegisti = !e.optString("anahtar").equals(ayar.optString("anahtar"))
                     || !e.optString("sunucu").equals(ayar.optString("sunucu"))
                     || !e.optString("vault").equals(ayar.optString("vault"));
-            if (hesapDegisti) yaz.remove("teslimler").remove("yuklemeler");
+            if (hesapDegisti) yaz.remove("teslimler").remove("yuklemeler").remove("esitleme_izi").remove("esitleme_gerek");
             else {
                 // Uygulama arka planda yüklenen kaydı kendi listesine işledikten sonra (artık "gönderilecek" değil)
                 // yükleme makbuzu düşer; işlenmeden düşerse aynı kayıt ikinci kez yüklenebilirdi.
@@ -146,7 +146,18 @@ public class ArkaPlanIsci extends Worker {
             if (!f.isFile()) continue;
             if (dur.getAsBoolean() || android.os.SystemClock.elapsedRealtime() >= son) { bekleyen++; continue; }
             String kanonik = f.getAbsolutePath();
-            if (!YUKLENEN.add(kanonik)) { bekleyen++; continue; } // uygulama şu an gönderiyor
+            // 0.11.9: turun başındaki görüntü eskimiş olabilir — uygulama bu arada yüklemeyi bitirmiş (makbuz yazılmış ya da
+            // kayıt listesinden "gönderilecek" çıkmış) olabilir. Karar taze depodan ve YUKLENEN'e eklemeyle aynı kilitte
+            // verilir; 09.10 emülatör testinde aynı kayıt iki kez yüklenmişti.
+            synchronized (KILIT) {
+                JSONObject tazeY = new JSONObject(depo(c).getString("yuklemeler", "{}"));
+                boolean halaBekliyor = false;
+                JSONArray tazeG = new JSONObject(depo(c).getString("ayar", "{}")).optJSONArray("gonderilecek");
+                for (int m = 0; tazeG != null && m < tazeG.length(); m++) if (lid.equals(tazeG.getJSONObject(m).optString("id"))) halaBekliyor = true;
+                if (tazeY.has(lid)) { yuklemeler.put(lid, tazeY.getString(lid)); continue; }
+                if (!halaBekliyor) continue;
+                if (!YUKLENEN.add(kanonik)) { bekleyen++; continue; } // uygulama şu an gönderiyor
+            }
             try {
                 durum.yaz("Kayıt buluta gönderiliyor");
                 JSONObject alanlar = new JSONObject().put("baslangic", g.optString("baslangic")).put("yazici", a.optString("yazici", "claude"));
@@ -222,6 +233,14 @@ public class ArkaPlanIsci extends Worker {
                         sesSil(c, o.optString("yol"));
                         try { istek(a, "/v1/oturum/" + id, "DELETE"); } catch (Exception ignored) { }
                         bildir(c, id, makbuz.optString("baslik"), yol.isEmpty() ? "Not alınacak konuşma bulunamadı." : "Obsidian'a yazıldı.");
+                        if (!yol.isEmpty()) {
+                            // 0.11.9: telefondaki not bilgisayarınkiyle aynı; izi işlenir, ardından vault eşitlenir.
+                            synchronized (KILIT) {
+                                JSONObject iz = VaultEsitleme.izOku(c);
+                                iz.put(yol, hash);
+                                depo(c).edit().putString("esitleme_izi", iz.toString()).putBoolean("esitleme_gerek", true).commit();
+                            }
+                        }
                     } catch (Exception e) {
                         bekleyen++; /* Sonuç ve telefondaki ses kalır; bir sonraki tur yeniden dener. */
                     }
@@ -229,6 +248,12 @@ public class ArkaPlanIsci extends Worker {
             }
         }
         try { hatirlaticilariCek(c, a); } catch (Exception ignored) { }
+        // 0.11.9 (09.10.2026, Boran): not arka planda yazıldıysa bilgisayarın aynı kayıtla güncellediği notlar da
+        // (Kontrol Paneli, Hatırlatıcılar…) Eşitle'ye basmadan telefona gelir. Uygulama öne gelirse yarıda bırakılır;
+        // bayrak kalır ve uygulama açılışta eşitler.
+        if (VaultEsitleme.gerekliMi(c) && !dur.getAsBoolean() && !a.optString("vault").isEmpty()) {
+            try { durum.yaz("Obsidian eşitleniyor"); VaultEsitleme.esitle(c, a, dur); } catch (Exception ignored) { }
+        }
         return bekleyen;
     }
 
