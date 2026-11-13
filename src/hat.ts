@@ -13,6 +13,7 @@ import { yerel, type CanliDurum, type ModelDurumu, type Paylasim } from "./yerel
 import protokol from "./vault/protokol.md?raw";
 import { version as SURUM } from "../package.json";
 import { agIstek } from "./ag";
+import { BAKILIYOR, INTERNET_YOK, eslesmeMetni, saglikSonucu, type Baglanti } from "./baglanti";
 
 type NotGirdisi = { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: string; saat?: string; metin: string }[] };
 
@@ -88,6 +89,14 @@ const ASAMA: Record<string, string> = {
 
 type Dinleyici = () => void;
 
+/** Bildirim başlığı tek satırdır: ilk ≈ 60 karakter, kelime sınırında. Metnin tamamı gövdede kalır. */
+export function kisaBaslik(metin: string, sinir = 60): string {
+  const tek = metin.replace(/\s+/g, " ").trim();
+  if (tek.length <= sinir) return tek;
+  const bosluk = tek.lastIndexOf(" ", sinir);
+  return `${tek.slice(0, bosluk > sinir / 2 ? bosluk : sinir).replace(/[\s,;:·—-]+$/, "")}…`;
+}
+
 function oku<T>(anahtar: string, varsayilan: T): T {
   try {
     const ham = localStorage.getItem(anahtar);
@@ -134,7 +143,7 @@ class Hat {
   sesKaydi: "yok" | "kayitta" | "isleniyor" = "yok";
   sesHatasi: string | null = null;
   hesap: HesapBilgisi | null = null;
-  baglanti: { durum: "bilinmiyor" | "bagli" | "kapali" | "anahtar"; metin: string } = { durum: "bilinmiyor", metin: "" };
+  baglanti: Baglanti = BAKILIYOR;
 
   private dinleyiciler = new Set<Dinleyici>();
   private yoklama: number | null = null;
@@ -433,7 +442,7 @@ class Hat {
         }
       }
       this.ayarla({ sunucu: j.sunucu, anahtar: j.anahtar });
-      this.eslestirme = { durum: "tamam", metin: "Eşleşti" };
+      this.eslestirme = { durum: "tamam", metin: eslesmeMetni(j.onay) };
       // Hesap bölümü (telefonlar, "Hesabımı sil") eşleşir eşleşmez görünsün; onay beklerken de (0.9.0).
       void this.baglantiDene().then(() => Promise.all([this.hesapYukle(), this.hatirlaticiCek()]));
     } catch (e) {
@@ -443,23 +452,22 @@ class Hat {
   }
 
   async baglantiDene(): Promise<string> {
-    const sonuc = (durum: Hat["baglanti"]["durum"], metin: string) => {
-      this.baglanti = { durum, metin };
+    const sonuc = (b: Baglanti) => {
+      this.baglanti = b;
       this.yayinla();
-      return metin;
+      return b.metin;
     };
-    if (!this.ayarlar.anahtar) return sonuc("bilinmiyor", "");
+    if (!this.ayarlar.anahtar) return sonuc(BAKILIYOR);
     try {
       const r = await agIstek(`${this.ayarlar.sunucu}/v1/saglik`, { headers: this.basliklar });
-      if (r.status === 401) return sonuc("anahtar", "Yeniden eşleştir.");
-      if (r.status === 503) return sonuc("kapali", ((await r.json().catch(() => ({}))) as { detail?: string }).detail ?? "Bilgisayar çevrim dışı. Kayıtlar telefonda.");
-      if (!r.ok) return sonuc("kapali", `Bulut ${r.status} döndü. Kayıtlar telefonda bekler.`);
-      const j = await r.json();
-      this.kuruluYazicilar = Object.keys(j.yazicilar ?? {});
-      if (typeof j.profil === "boolean" && !this.sesIzi) this.sesIzi = { var: j.profil };
-      return sonuc("bagli", j.konusmaci ? "Bağlı · konuşmacılar ayrılıyor" : "Bağlı");
+      const j = (await r.json().catch(() => ({}))) as { detail?: string; tur?: string; konusmaci?: boolean; yazicilar?: Record<string, string>; profil?: boolean };
+      if (r.ok) {
+        this.kuruluYazicilar = Object.keys(j.yazicilar ?? {});
+        if (typeof j.profil === "boolean" && !this.sesIzi) this.sesIzi = { var: j.profil };
+      }
+      return sonuc(saglikSonucu(r.status, j));
     } catch {
-      return sonuc("kapali", "İnternet yok. Kayıtlar telefonda.");
+      return sonuc(INTERNET_YOK);
     }
   }
 
@@ -521,11 +529,14 @@ class Hat {
         if (typeof h?.id !== "string" || !/^[0-9a-f]{16}$/.test(h.id) || typeof h.tarih !== "string" || typeof h.metin !== "string") continue;
         const t = h.tarih.match(/^(\d{4})-(\d{2})-(\d{2})$/);
         const s = typeof h.saat === "string" ? h.saat.match(/^([01]\d|2[0-3]):([0-5]\d)$/) : null;
-        const metin = h.metin.trim().slice(0, 200);
+        // 0.12.0 (08.11.2026, Boran): metnin tamamı başlığa konuyordu; Android başlığı tek satırda keser, bildirim
+        // açılınca da kaydırmaz, ve içerik okunamıyordu. Başlık kısa, metin gövdede (açılınca ve uygulamada tam).
+        const metin = h.metin.trim().replace(/\*\*|`/g, "").slice(0, 2000);
         if (!t || !metin) continue;
         const zamanMs = new Date(+t[1], +t[2] - 1, +t[3], s ? +s[1] : 9, s ? +s[2] : 0, 0).getTime();
         const kaynak = typeof h.kaynak === "string" && h.kaynak.trim() ? h.kaynak.trim().replace(/\.md$/, "") : "Bilgisayardaki vault";
-        liste.push({ id: h.id, zamanMs, bugun: h.tarih === bugun, baslik: metin, metin: `${kaynak} · ${h.tarih}${s ? ` ${s[0]}` : ""}` });
+        liste.push({ id: h.id, zamanMs, bugun: h.tarih === bugun, baslik: kisaBaslik(metin),
+          metin: `${metin}\n${kaynak} · ${h.tarih}${s ? ` ${s[0]}` : ""}` });
       }
       if (liste.length) await this.bildirimIzniSor();
       const { kurulan } = await yerel.hatirlaticiEsitle({ liste });

@@ -389,12 +389,14 @@ public class YuzukEklentisi extends Plugin {
     @Override
     public void load() {
         paylasimIsle(getActivity().getIntent());
+        bildirimIsle(getActivity().getIntent());
     }
 
     @Override
     protected void handleOnNewIntent(Intent intent) {
         super.handleOnNewIntent(intent);
         paylasimIsle(intent);
+        bildirimIsle(intent);
     }
 
     private void paylasimIsle(Intent intent) {
@@ -737,15 +739,37 @@ public class YuzukEklentisi extends Plugin {
             nm.createNotificationChannel(new NotificationChannel("not", "Hazır notlar", NotificationManager.IMPORTANCE_DEFAULT));
         }
         String metin = call.getString("metin", "");
+        String baslik = call.getString("baslik", "Yüzük");
+        long zaman = System.currentTimeMillis();
+        int kimlik = (int) (zaman % 100000);
         Notification n = new Notification.Builder(getContext(), "not")
-                .setContentTitle(call.getString("baslik", "Yüzük"))
+                .setContentTitle(baslik)
                 .setContentText(metin)
                 .setStyle(new Notification.BigTextStyle().bigText(metin))
                 .setSmallIcon(android.R.drawable.ic_menu_edit)
+                // 0.12.0: dokununca uygulama açılır, metin okuma kutusunda tam görünür (önceden dokunma hiçbir şey yapmıyordu).
+                .setContentIntent(BildirimOku.niyet(getContext(), "not|" + kimlik, baslik, metin, zaman))
                 .setAutoCancel(true)
                 .build();
-        nm.notify((int) (System.currentTimeMillis() % 100000), n);
+        nm.notify(kimlik, n);
         call.resolve();
+    }
+
+    /** 0.12.0: dokunulan bildirim; uygulama kapalıyken açıldıysa dinleyici kurulmadan gelmiştir, bir kez verilir. */
+    private JSObject bekleyenBildirim = null;
+
+    private void bildirimIsle(Intent intent) {
+        JSObject r = BildirimOku.oku(intent);
+        if (r == null) return;
+        bekleyenBildirim = r;
+        notifyListeners("bildirim", r, true);
+    }
+
+    @PluginMethod
+    public void bildirimAl(PluginCall call) {
+        JSObject r = bekleyenBildirim != null ? bekleyenBildirim : new JSObject();
+        bekleyenBildirim = null;
+        call.resolve(r);
     }
 
     // ------------------------------------------------ hatırlatıcı

@@ -54,10 +54,10 @@ public class HatirlaticiAlici extends BroadcastReceiver {
         if (nm.getNotificationChannel(KANAL) == null) {
             nm.createNotificationChannel(new NotificationChannel(KANAL, "Hatırlatıcılar", NotificationManager.IMPORTANCE_HIGH));
         }
-        PendingIntent ac = PendingIntent.getActivity(c, 0, new Intent(c, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
         String metin = i.getStringExtra("metin");
         String baslik = i.getStringExtra("baslik");
         long zaman = i.getLongExtra("zaman", System.currentTimeMillis());
+        PendingIntent ac = BildirimOku.niyet(c, "hatirlatici|" + id, baslik, metin, zaman);
         Notification.Builder nb = new Notification.Builder(c, KANAL)
                 .setContentTitle(baslik)
                 .setContentText(metin)

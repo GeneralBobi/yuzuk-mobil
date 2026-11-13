@@ -7,8 +7,8 @@ android {
         applicationId "app.claudian.yuzuk"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 11900
-        versionName "0.11.9"
+        versionCode 12000
+        versionName "0.12.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // Çevrimdışı yazıya dökme (whisper.cpp): telefonlar arm64; x86_64 yalnız emülatör için ve yalnız hata ayıklama
         // derlemesinde (0.8.0: yayın APK'sında ~3,6 MB gereksiz yük). Değer buildTypes'ta verilir.

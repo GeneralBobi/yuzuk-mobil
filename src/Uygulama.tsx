@@ -3,7 +3,7 @@ import { App as CapApp } from "@capacitor/app";
 import { ArrowLeft, ArrowRight, Check, FileAudio, Mic, NotebookPen, Settings, Square } from "lucide-react";
 import { durak, hat, YAZICILAR, type Oturum } from "./hat";
 import { Halka } from "./Halka";
-import { yerel, type Paylasim } from "./yerel";
+import { yerel, type OkunanBildirim, type Paylasim } from "./yerel";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
 type Sekme = "dinle" | "notlar" | "ayarlar";
@@ -62,10 +62,31 @@ function EslestirmeOnayi() {
   );
 }
 
+/** 0.12.0 (08.11.2026, Boran): bildirim yukarıdan okunamıyordu; dokununca metnin tamamı burada açılır. Bildirimler
+ *  bölümü değil: yalnız dokunulan bildirim, kapanınca iz bırakmaz. */
+function BildirimOkuma({ b, kapat }: { b: OkunanBildirim; kapat: () => void }) {
+  const zaman = b.zaman
+    ? new Date(b.zaman).toLocaleString("tr-TR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })
+    : null;
+  return (
+    <div className="onay-perde" role="dialog" aria-modal="true" aria-labelledby="bildirim-baslik" onClick={kapat}>
+      <div className="onay-kutu" onClick={(e) => e.stopPropagation()}>
+        <h2 id="bildirim-baslik">{b.baslik || "Yüzük"}</h2>
+        {zaman && <p className="aciklama">{zaman}</p>}
+        {b.metin && <p className="bildirim-metin">{b.metin}</p>}
+        <div className="satir-eylem">
+          <button className="dugme birincil" onClick={kapat}>Kapat</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Uygulama() {
   useHat();
   const [sekme, setSekme] = useState<Sekme>(() => (hat.hazir ? "dinle" : "ayarlar"));
   const [akis, setAkis] = useState<Akis>(null);
+  const [okunan, setOkunan] = useState<OkunanBildirim | null>(null);
 
   useEffect(() => {
     void hat.baslat().then(() => hat.esitlemeGerekirse());
@@ -88,6 +109,13 @@ export function Uygulama() {
     });
     // Bilgisayardaki hatırlatıcılar uygulama açıkken 15 dakikada bir yeniden okunur; kurulu alarmlar kapalıyken de çalar.
     const yoklama = window.setInterval(() => void hat.hatirlaticiCek(), 15 * 60e3);
+    // 0.12.1: eşleşmiş ama henüz bağlı olmayan telefon (onay bekliyor, bilgisayar az önce açıldı, internet geldi)
+    // kullanıcı "Bağlantıyı dene"ye basmadan kendiliğinden bağlanır. Bağlıyken ve arka planda istek atılmaz.
+    const baglantiYoklama = window.setInterval(() => {
+      if (document.visibilityState === "visible" && hat.ayarlar.anahtar && hat.baglanti.durum !== "bagli" && hat.baglanti.durum !== "anahtar") {
+        void hat.baglantiDene().then(() => { if (hat.baglanti.durum === "bagli") void hat.ilerlet(); });
+      }
+    }, 20e3);
     // "Paylaş → Claudian": açılışta bekleyen paylaşım bir kez alınır, uygulama açıkken gelenler dinlenir.
     const paylas = (p: Paylasim) => {
       hat.paylasimIsle(p);
@@ -95,25 +123,31 @@ export function Uygulama() {
     };
     void yerel.paylasimAl().then(paylas).catch(() => undefined);
     const paylasim = yerel.addListener("paylasim", paylas);
+    // 0.12.0: dokunulan bildirim okuma kutusunda tam açılır (uygulama kapalıyken açıldıysa bir kez alınır).
+    const oku = (b: OkunanBildirim) => { if (b.metin || b.baslik) setOkunan(b); };
+    void yerel.bildirimAl().then(oku).catch(() => undefined);
+    const bildirim = yerel.addListener("bildirim", oku);
     return () => {
       void dinleyici.then((d) => d.remove());
       void on.then((d) => d.remove());
       void paylasim.then((d) => d.remove());
-      window.clearInterval(yoklama);
+      void bildirim.then((d) => d.remove());
+      window.clearInterval(baglantiYoklama); clearInterval(yoklama);
     };
   }, []);
 
   // Android Geri: önce açık akış kapanır, sonra Dinle'ye dönülür, en son uygulama arka plana gider.
   useEffect(() => {
     const geri = CapApp.addListener("backButton", () => {
-      if (akis) {
+      if (okunan) setOkunan(null);
+      else if (akis) {
         if (hat.sesKaydi === "kayitta") void hat.sesKaydiBitir(true);
         setAkis(null);
       } else if (sekme !== "dinle") setSekme("dinle");
       else void CapApp.minimizeApp();
     });
     return () => void geri.then((d) => d.remove());
-  }, [akis, sekme]);
+  }, [akis, sekme, okunan]);
 
   useEffect(() => {
     if (sekme === "ayarlar") void hat.hesapYukle();
@@ -155,6 +189,7 @@ export function Uygulama() {
         )}
       </div>
       {hat.bekleyenKod && <EslestirmeOnayi />}
+      {okunan && !hat.bekleyenKod && <BildirimOkuma b={okunan} kapat={() => setOkunan(null)} />}
     </>
   );
 }
@@ -199,11 +234,11 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
           <ArrowRight size={18} />
         </button>
       )}
-      {hat.hazir && (hat.baglanti.durum === "kapali" || hat.baglanti.durum === "anahtar") && hat.baglanti.metin && (
+      {hat.hazir && (hat.baglanti.durum === "kapali" || hat.baglanti.durum === "anahtar" || hat.baglanti.durum === "onay") && hat.baglanti.metin && (
         // Bilgisayar yoksa, onay bekliyorsa ya da kapalıysa telefon bunu dinleme ekranında da söyler; eşleşme sessizce takılmaz.
         <button className="kurulum-satiri" onClick={() => git("ayarlar")}>
           <span>
-            <strong>Not şu an yazılamıyor</strong>
+            <strong>{hat.baglanti.durum === "onay" ? "Cihaz onayı bekleniyor" : "Not şu an yazılamıyor"}</strong>
             <span>{hat.baglanti.metin}</span>
           </span>
           <ArrowRight size={18} />
@@ -396,7 +431,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
           <div className="satir-bas">
             <h2>Bağlantı</h2>
             <span className={`etiket ${b.durum === "bagli" ? "" : "soluk"}`}>
-              {!eslesti ? "eşleşmedi" : b.durum === "bagli" ? "bağlı" : b.durum === "bilinmiyor" ? "bakılıyor" : "ulaşılamıyor"}
+              {!eslesti ? "eşleşmedi" : b.etiket}
             </span>
           </div>
           {eslesti ? (

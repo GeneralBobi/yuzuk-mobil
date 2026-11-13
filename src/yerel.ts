@@ -65,6 +65,9 @@ export interface YuzukEklentisi {
   hatirlaticiIslemleri(): Promise<{ islemler: { kimlik: string; islem: "yapildi" | "yarin"; an: number }[] }>;
   bildirimIzni(): Promise<{ verildi: boolean }>;
   paylasimAl(): Promise<Paylasim>;
+  /** 0.12.0: dokunulan bildirim (uygulama kapalıyken açıldıysa bir kez verilir); yoksa boş nesne. */
+  bildirimAl(): Promise<OkunanBildirim>;
+  addListener(olay: "bildirim", dinleyici: (b: OkunanBildirim) => void): Promise<{ remove: () => Promise<void> }>;
   vaultListe(o: { agac: string }): Promise<{ dosyalar: { yol: string; boyut: number; mtime: number }[] }>;
   vaultOku(o: { agac: string; yol: string }): Promise<{ icerik: string }>;
   addListener(olay: "paylasim", dinleyici: (p: Paylasim) => void): Promise<{ remove: () => Promise<void> }>;
@@ -77,6 +80,13 @@ export interface Paylasim {
   yol?: string;
   ad?: string | null;
   hata?: string;
+}
+
+/** Dokunularak açılan bildirimin içeriği. */
+export interface OkunanBildirim {
+  baslik?: string;
+  metin?: string;
+  zaman?: number;
 }
 
 export const yerel = registerPlugin<YuzukEklentisi>("Yuzuk");

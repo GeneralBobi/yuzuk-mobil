@@ -390,9 +390,10 @@ public class ArkaPlanIsci extends Worker {
     static void bildir(Context c, String id, String baslik, String metin) {
         NotificationManager nm = (NotificationManager)c.getSystemService(Context.NOTIFICATION_SERVICE);
         nm.createNotificationChannel(new NotificationChannel("not", "Hazır notlar", NotificationManager.IMPORTANCE_DEFAULT));
-        PendingIntent ac = PendingIntent.getActivity(c, 0, new Intent(c, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
+        PendingIntent ac = BildirimOku.niyet(c, "hazir|" + id, "Not hazır · " + baslik, metin, System.currentTimeMillis());
         try { nm.notify(id.hashCode(), new Notification.Builder(c, "not").setSmallIcon(android.R.drawable.ic_popup_reminder)
-                .setContentTitle("Not hazır · " + baslik).setContentText(metin).setContentIntent(ac).setAutoCancel(true).build()); }
+                .setContentTitle("Not hazır · " + baslik).setContentText(metin)
+                .setStyle(new Notification.BigTextStyle().bigText(metin)).setContentIntent(ac).setAutoCancel(true).build()); }
         catch (SecurityException ignored) { /* Bildirim izni yoksa yazılmış not ve makbuz kalır. */ }
     }
 }

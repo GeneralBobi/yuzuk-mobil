@@ -1,0 +1,78 @@
+# Yüzük iOS. Mac olmadan derleme: web katmanı kurulur, simülatör için derlenir (imza gerekmez) ve Swift katmanının
+# derlendiği burada doğrulanır. Aşağıdaki sırlar eklenince aynı iş arşivler ve TestFlight'a yükler:
+#   IOS_CERTIFICATE_P12 (base64 "Apple Distribution" sertifikası), IOS_CERTIFICATE_PASSWORD,
+#   IOS_PROVISIONING_PROFILE (base64 App Store profili), APPLE_TEAM_ID,
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (App Store Connect API anahtarı)
+name: iOS
+on:
+  workflow_dispatch:
+  push:
+    branches: ['surum-*', 'denetim/**']
+    paths: ['ios/**', 'src/**', 'package.json', '.github/workflows/ios.yml']
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      HAS_SIGNING: ${{ secrets.IOS_CERTIFICATE_P12 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - name: Birim testleri
+        run: node --test test/*.test.ts
+      - name: Web katmanı ve iOS eşitleme
+        run: npm run build && npx cap sync ios
+      - name: Simülatör derlemesi (imzasız)
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tail -40
+      - name: İmza anahtarlığı
+        if: env.HAS_SIGNING == 'true'
+        env:
+          P12: ${{ secrets.IOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+        run: |
+          KEYCHAIN=$RUNNER_TEMP/yuzuk.keychain-db
+          PASS=$(uuidgen)
+          echo "$P12" | base64 --decode > $RUNNER_TEMP/dist.p12
+          security create-keychain -p "$PASS" $KEYCHAIN
+          security set-keychain-settings -lut 21600 $KEYCHAIN
+          security unlock-keychain -p "$PASS" $KEYCHAIN
+          security import $RUNNER_TEMP/dist.p12 -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN
+          security set-key-partition-list -S apple-tool:,apple: -k "$PASS" $KEYCHAIN
+          security list-keychain -d user -s $KEYCHAIN
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/yuzuk.mobileprovision
+      - name: Arşiv ve TestFlight
+        if: env.HAS_SIGNING == 'true'
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -o pipefail
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$ASC_KEY_P8" > ~/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath $RUNNER_TEMP/Yuzuk.xcarchive \
+            DEVELOPMENT_TEAM=$TEAM CURRENT_PROJECT_VERSION=${{ github.run_number }} archive | tail -30
+          cat > $RUNNER_TEMP/export.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>destination</key><string>upload</string>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath $RUNNER_TEMP/Yuzuk.xcarchive -exportOptionsPlist $RUNNER_TEMP/export.plist \
+            -exportPath $RUNNER_TEMP/export -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8 \
+            -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID | tail -20
