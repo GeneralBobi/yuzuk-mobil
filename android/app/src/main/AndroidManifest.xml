@@ -63,6 +63,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- 0.13.0: "AI'lara doğrudan bağlan" açıkken telefonu relay'de çevrimiçi tutar (Claude/ChatGPT → telefondaki vault). -->
+        <service
+            android:name=".HafizaServisi"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <receiver
             android:name=".HatirlaticiAlici"
             android:exported="false">

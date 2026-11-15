@@ -3,6 +3,7 @@ import { App as CapApp } from "@capacitor/app";
 import { ArrowLeft, ArrowRight, Check, FileAudio, Mic, NotebookPen, Settings, Square } from "lucide-react";
 import { durak, hat, YAZICILAR, type Oturum } from "./hat";
 import { Halka } from "./Halka";
+import { Dogrudan } from "./Dogrudan";
 import { yerel, type OkunanBildirim, type Paylasim } from "./yerel";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
@@ -88,6 +89,8 @@ export function Uygulama() {
   const [akis, setAkis] = useState<Akis>(null);
   const [okunan, setOkunan] = useState<OkunanBildirim | null>(null);
 
+  // 0.13.0: "AI'lara doğrudan bağlan" açık bırakıldıysa arka plan servisi uygulama açılınca yeniden başlar.
+  useEffect(() => { void yerel.dogrudanAyarla({}).catch(() => undefined); }, []);
   useEffect(() => {
     void hat.baslat().then(() => hat.esitlemeGerekirse());
     // Sistem çubuğu boşlukları sayfa hazırken yeniden yazılsın (üç tuşlu gezinmede alt menü boşluk bırakıyordu).
@@ -474,6 +477,9 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
             {hat.vaultHatasi && <p className="hata">{hat.vaultHatasi}</p>}
           </div>
         </div>
+
+        {/* 0.13.0: eşleştirmenin yanında ikinci yol; biri diğerini kapatmaz. */}
+        <Dogrudan />
 
         {a.vault && eslesti && (
           <div className="satir">
