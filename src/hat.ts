@@ -109,6 +109,8 @@ function oku<T>(anahtar: string, varsayilan: T): T {
 class Hat {
   ayarlar: Ayarlar = { ...{ sunucu: VARSAYILAN_SUNUCU, anahtar: "", altKlasor: "Yüzük", yazici: "claude" }, ...oku<Partial<Ayarlar>>("ayarlar", {}) };
   kuruluYazicilar: string[] | null = null; // sunucunun bilgisayarında kurulu olanlar
+  /** 0.13.2: neden seçilemiyor — "giris" (kurulu, giriş yok) ya da "yok" (kurulu değil). Eski motor göndermez. */
+  yaziciDurum: Record<string, string> | null = null;
   oturumlar: Oturum[] = oku("oturumlar", []);
   kaydediyor = false;
   kayitBaslangic: number | null = null;
@@ -460,9 +462,10 @@ class Hat {
     if (!this.ayarlar.anahtar) return sonuc(BAKILIYOR);
     try {
       const r = await agIstek(`${this.ayarlar.sunucu}/v1/saglik`, { headers: this.basliklar });
-      const j = (await r.json().catch(() => ({}))) as { detail?: string; tur?: string; konusmaci?: boolean; yazicilar?: Record<string, string>; profil?: boolean };
+      const j = (await r.json().catch(() => ({}))) as { detail?: string; tur?: string; konusmaci?: boolean; yazicilar?: Record<string, string>; yazici_durum?: Record<string, string>; profil?: boolean };
       if (r.ok) {
         this.kuruluYazicilar = Object.keys(j.yazicilar ?? {});
+        this.yaziciDurum = j.yazici_durum && typeof j.yazici_durum === "object" ? j.yazici_durum : null;
         if (typeof j.profil === "boolean" && !this.sesIzi) this.sesIzi = { var: j.profil };
       }
       return sonuc(saglikSonucu(r.status, j));

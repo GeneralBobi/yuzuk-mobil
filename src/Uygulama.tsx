@@ -552,7 +552,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
               return (
                 <button key={id} role="radio" aria-checked={(a.yazici || "claude") === id} disabled={!kurulu}
                   className="secenek" onClick={() => hat.ayarla({ yazici: id })}>
-                  {ad}{!kurulu && <small>bilgisayarda yok</small>}
+                  {ad}{!kurulu && <small>{hat.yaziciDurum?.[id] === "giris" ? "bilgisayarda giriş gerekli" : hat.yaziciDurum?.[id] === "yok" ? "bilgisayarda kurulu değil" : "bilgisayarda yok"}</small>}
                 </button>
               );
             })}
