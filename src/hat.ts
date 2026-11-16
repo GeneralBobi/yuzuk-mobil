@@ -77,7 +77,7 @@ export interface Ayarlar {
   yazici: string; // notu yazan AI: claude | codex | gemini
 }
 
-export const YAZICILAR: Record<string, string> = { claude: "Claude", codex: "ChatGPT", gemini: "Gemini" };
+export const YAZICILAR: Record<string, string> = { claude: "Claude", codex: "ChatGPT", gemini: "Antigravity" };
 
 const ASAMA: Record<string, string> = {
   sirada: "Sırada",
