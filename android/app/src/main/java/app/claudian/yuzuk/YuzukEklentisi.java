@@ -313,6 +313,51 @@ public class YuzukEklentisi extends Plugin {
         }
     }
 
+    // ------------------------------------------------ tam mobil mod (0.14.0): dökümü AI'a açma ve teslim makbuzları
+
+    /** Yalnız hata ayıklama derlemesi: telefonun MCP araçlarını relay ve OAuth olmadan çağırır (emülatörde uçtan uca test). */
+    @PluginMethod
+    public void mcpDene(PluginCall call) {
+        if (!BuildConfig.DEBUG) { call.reject("yalnız hata ayıklama derlemesinde"); return; }
+        new Thread(() -> {
+            try {
+                String ad = call.getString("ad", "");
+                JSONObject arg = new JSONObject(call.getString("arg", "{}"));
+                String vault = DogrudanCihaz.durum(getContext()).optString("vault");
+                String metin = MobilKayitlar.bizim(ad) ? MobilKayitlar.cagir(getContext(), ad, arg, true)
+                    : DogrudanHafiza.cagir(getContext(), vault, ad, arg, true);
+                JSObject r = new JSObject(); r.put("metin", metin); call.resolve(r);
+            } catch (Exception e) { call.reject(e.getMessage() != null ? e.getMessage() : e.toString()); }
+        }).start();
+    }
+
+    @PluginMethod
+    public void mobilEkle(PluginCall call) {
+        try {
+            MobilKayitlar.ekle(getContext(), call.getString("id", ""), call.getString("yol", ""), call.getString("baslangic", ""),
+                call.getLong("sureSn", 0L), call.getString("vault", ""), call.getString("altKlasor", "Yüzük"));
+            call.resolve();
+        } catch (Exception e) { call.reject(e.getMessage() != null ? e.getMessage() : e.toString()); }
+    }
+
+    @PluginMethod
+    public void mobilCikar(PluginCall call) {
+        MobilKayitlar.cikar(getContext(), call.getString("id", ""));
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void mobilTeslimler(PluginCall call) {
+        try { JSObject r = new JSObject(); r.put("teslimler", MobilKayitlar.teslimler(getContext())); call.resolve(r); }
+        catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void mobilOnayla(PluginCall call) {
+        try { MobilKayitlar.onayla(getContext(), call.getArray("ids", new JSArray())); call.resolve(); }
+        catch (Exception e) { call.reject(e.getMessage()); }
+    }
+
     @PluginMethod
     public void modelDurumu(PluginCall call) {
         JSObject r = new JSObject();
@@ -759,7 +804,7 @@ public class YuzukEklentisi extends Plugin {
     private JSObject bekleyenBildirim = null;
 
     private void bildirimIsle(Intent intent) {
-        JSObject r = BildirimOku.oku(intent);
+        JSObject r = BildirimOku.oku(getContext(), intent);
         if (r == null) return;
         bekleyenBildirim = r;
         notifyListeners("bildirim", r, true);

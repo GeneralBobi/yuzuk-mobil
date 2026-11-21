@@ -129,7 +129,8 @@ final class DogrudanHafiza {
         if (protokol == null) protokol = bul(kok, "Vault Protocol.md");
         if (protokol != null) {
             String m = VaultEsitleme.oku(c, protokol);
-            s.append("## Vault protokolü\n").append(m.length() > 12_000 ? m.substring(0, 12_000) + "\n[kısaltıldı]" : m).append("\n\n");
+            // 21.11.2026: protokol 3.0.0 ~36 bin karakter; 12 binde kesilince telefondaki AI kuralların üçte birini görüyordu.
+            s.append("## Vault protokolü\n").append(m.length() > 60_000 ? m.substring(0, 60_000) + "\n[kısaltıldı]" : m).append("\n\n");
         }
         DocumentFile basla = bul(kok, "Start Here.md");
         if (basla == null) basla = bul(kok, "Buradan Başla.md");

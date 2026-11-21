@@ -76,7 +76,17 @@ export interface YuzukEklentisi {
   vaultListe(o: { agac: string }): Promise<{ dosyalar: { yol: string; boyut: number; mtime: number }[] }>;
   vaultOku(o: { agac: string; yol: string }): Promise<{ icerik: string }>;
   addListener(olay: "paylasim", dinleyici: (p: Paylasim) => void): Promise<{ remove: () => Promise<void> }>;
+  /** 0.14.0 tam mobil: bitmiş döküm AI'a açılır (telefonun MCP'si yuzuk_* araçlarıyla görür). */
+  mobilEkle(o: { id: string; yol: string; baslangic: string; sureSn: number; vault: string; altKlasor: string }): Promise<void>;
+  mobilCikar(o: { id: string }): Promise<void>;
+  /** AI'ın telefona yazdığı notların makbuzları (arayüz kapalıyken de yazılabilir). */
+  mobilTeslimler(): Promise<{ teslimler: Record<string, MobilTeslim> }>;
+  mobilOnayla(o: { ids: string[] }): Promise<void>;
+  /** Yalnız hata ayıklama derlemesi: telefon MCP aracını relay'siz çağırır (emülatör testi). */
+  mcpDene(o: { ad: string; arg: string }): Promise<{ metin: string }>;
 }
+
+export interface MobilTeslim { yol: string; ad: string; baslik: string; ozet: string; hatirlatici: number; mahrem?: number }
 
 type OturumArkaPlan = { id: string; sunucuId?: string; yol: string; baslangic: string; baslik?: string };
 

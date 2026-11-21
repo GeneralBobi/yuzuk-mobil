@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { App as CapApp } from "@capacitor/app";
-import { ArrowLeft, ArrowRight, Check, FileAudio, Mic, NotebookPen, Settings, Square } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, FileAudio, Laptop, Mic, NotebookPen, Settings, Smartphone, Square } from "lucide-react";
 import { durak, hat, YAZICILAR, type Oturum } from "./hat";
 import { Halka } from "./Halka";
 import { Dogrudan } from "./Dogrudan";
@@ -70,15 +70,49 @@ function BildirimOkuma({ b, kapat }: { b: OkunanBildirim; kapat: () => void }) {
     ? new Date(b.zaman).toLocaleString("tr-TR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })
     : null;
   return (
-    <div className="onay-perde" role="dialog" aria-modal="true" aria-labelledby="bildirim-baslik" onClick={kapat}>
-      <div className="onay-kutu" onClick={(e) => e.stopPropagation()}>
-        <h2 id="bildirim-baslik">{b.baslik || "Yüzük"}</h2>
-        {zaman && <p className="aciklama">{zaman}</p>}
-        {b.metin && <p className="bildirim-metin">{b.metin}</p>}
-        <div className="satir-eylem">
-          <button className="dugme birincil" onClick={kapat}>Kapat</button>
-        </div>
+    // 21.11.2026 (Boran): alttan açılan kart "sayfa açılmıyor" diye okundu; bildirim artık tam ekran bir sayfada açılır.
+    <div className="bildirim-sayfa" role="dialog" aria-modal="true" aria-labelledby="bildirim-baslik">
+      <div className="akis-bas">
+        <button className="geri" onClick={kapat} aria-label="Geri"><ArrowLeft size={22} /></button>
       </div>
+      {zaman && <p className="etiket-satir">{zaman}</p>}
+      <h1 id="bildirim-baslik">{b.baslik || "Yüzük"}</h1>
+      {b.metin && <p className="bildirim-metin">{b.metin}</p>}
+      <div className="satir-eylem">
+        <button className="dugme birincil" onClick={kapat}>Tamam</button>
+      </div>
+    </div>
+  );
+}
+
+/** 0.14.0 (21.11.2026, Boran): ilk açılışta tek soru. Eşleşmiş eski kurulumlar bunu görmez (PC'de kalır). */
+function ModSecimi() {
+  return (
+    <section className="mod-secimi">
+      <h1>Notlarını kim yazsın?</h1>
+      <div className="mod-kartlari">
+        <button className="mod-karti" onClick={() => hat.modSec("pc")}>
+          <Laptop size={22} strokeWidth={1.6} />
+          <strong>Bilgisayarımla</strong>
+          <span>Claudian bilgisayarda çalışır, notu oradaki AI yazar. Konuşmacılar ayrılır.</span>
+        </button>
+        <button className="mod-karti" onClick={() => hat.modSec("mobil")}>
+          <Smartphone size={22} strokeWidth={1.6} />
+          <strong>Yalnız telefonla</strong>
+          <span>Konuşma telefonda metne döner, notu telefondaki Claude ya da ChatGPT'n yazar.</span>
+        </button>
+      </div>
+      <p className="dipnot">Sonra Ayarlar'dan değiştirebilirsin.</p>
+    </section>
+  );
+}
+
+/** Tam mobilde notu bekleyen kayıtlar: hangi AI'ın yazacağını kullanıcı seçer. */
+function AiDugmeleri() {
+  return (
+    <div className="satir-eylem">
+      <button className="dugme birincil" onClick={() => void hat.aiAc("claude")}>Claude'da yazdır</button>
+      <button className="dugme" onClick={() => void hat.aiAc("chatgpt")}>ChatGPT'de yazdır</button>
     </div>
   );
 }
@@ -105,6 +139,8 @@ export function Uygulama() {
     void CapApp.getLaunchUrl().then((r) => linkIsle(r?.url));
     const dinleyici = CapApp.addListener("appUrlOpen", (e) => linkIsle(e.url));
     const on = CapApp.addListener("resume", () => {
+      // Günlük süre dolup durmuş telefon MCP servisi uygulama öne gelince yeniden başlar (bağlantı açıksa).
+      void yerel.dogrudanAyarla({}).catch(() => undefined);
       void hat.baglantiDene();
       void hat.hatirlaticiCek();
       // Arka plan teslimleri önce işlenir (ilerlet), sonra gerekirse beklemeden eşitlenir.
@@ -164,6 +200,7 @@ export function Uygulama() {
   }, [sekme, akis]);
 
   const bekleyen = hat.oturumlar.filter((o) => o.durum !== "yazildi").length;
+  const soru = !hat.ayarlar.mod;
 
   return (
     <>
@@ -174,13 +211,14 @@ export function Uygulama() {
         </header>
         <main className="icerik">
           <div key={akis ?? sekme}>
-              {akis === "ses" ? <SesiniTanit kapat={() => setAkis(null)} />
+              {soru ? <ModSecimi />
+                : akis === "ses" ? <SesiniTanit kapat={() => setAkis(null)} />
                 : sekme === "dinle" ? <Dinle git={setSekme} />
                 : sekme === "notlar" ? <Notlar />
                 : <Ayarlar ac={setAkis} />}
           </div>
         </main>
-        {!akis && (
+        {!akis && !soru && (
           <nav className="altbar" aria-label="Gezinme">
             <SekmeDugmesi etiket="Dinle" aktif={sekme === "dinle"} onClick={() => setSekme("dinle")} ikon={<Mic size={20} />}
               isaret={hat.kaydediyor && sekme !== "dinle"} />
@@ -224,7 +262,8 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
   useSaniye(hat.kaydediyor);
   const son = hat.oturumlar[0];
   const bugun = new Date().toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" });
-  const eksik = !hat.ayarlar.anahtar ? "Eşleştir · klasör seç" : "Klasör seç";
+  const eksik = hat.mobil || hat.ayarlar.anahtar ? "Obsidian klasörünü seç" : "Eşleştir · klasör seç";
+  const aiBekleyen = hat.oturumlar.filter((o) => o.durum === "ai").length;
 
   return (
     <section className="dinle">
@@ -237,7 +276,13 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
           <ArrowRight size={18} />
         </button>
       )}
-      {hat.hazir && (hat.baglanti.durum === "kapali" || hat.baglanti.durum === "anahtar" || hat.baglanti.durum === "onay") && hat.baglanti.metin && (
+      {hat.mobil && aiBekleyen > 0 && !hat.kaydediyor && (
+        <div className="uyari-kutu">
+          <p className="aciklama"><b>{aiBekleyen} kayıt</b> metne döndü; notu AI'ın yazacak.</p>
+          <AiDugmeleri />
+        </div>
+      )}
+      {hat.hazir && !hat.mobil && (hat.baglanti.durum === "kapali" || hat.baglanti.durum === "anahtar" || hat.baglanti.durum === "onay") && hat.baglanti.metin && (
         // Bilgisayar yoksa, onay bekliyorsa ya da kapalıysa telefon bunu dinleme ekranında da söyler; eşleşme sessizce takılmaz.
         <button className="kurulum-satiri" onClick={() => git("ayarlar")}>
           <span>
@@ -276,9 +321,11 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
       {hat.uyari && <p className="hata" role="alert">{hat.uyari}</p>}
       {hat.arkaPlanHatasi && <p className="hata" role="alert">{hat.arkaPlanHatasi}</p>}
 
-      <button className="dugme genis" onClick={() => void hat.iceAktar()} disabled={hat.kaydediyor}>
-        <FileAudio size={18} /> Dosyadan not çıkar
-      </button>
+      {!hat.mobil && (
+        <button className="dugme genis" onClick={() => void hat.iceAktar()} disabled={hat.kaydediyor}>
+          <FileAudio size={18} /> Dosyadan not çıkar
+        </button>
+      )}
 
       {son && <div className="liste bolum"><OturumSatiri o={son} /></div>}
     </section>
@@ -288,7 +335,8 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
 /** Süren kaydın parçaları nerede metne döndü: bağlantı koparsa bunu görmek güven verir, not kaybolmuyor. */
 function ParcaDurumu() {
   const c = hat.canli!;
-  const yer = c.durum === "telefon" ? "bağlantı yok · telefonda metne çevriliyor"
+  const yer = hat.mobil ? (c.durum === "bekliyor" ? "model hazır değil · parçalar bellekte" : "telefonda metne çevriliyor")
+    : c.durum === "telefon" ? "bağlantı yok · telefonda metne çevriliyor"
     : c.durum === "bekliyor" ? "bağlantı yok · parçalar bellekte bekliyor"
     : c.durum === "bilgisayar" ? "bilgisayarında metne çevriliyor" : "ilk parça bekleniyor";
   return (
@@ -334,6 +382,7 @@ function Notlar() {
 }
 
 const DURAKLAR = ["telefonda", "bulutta", "yazılıyor", "obsidian"];
+const MOBIL_DURAKLAR = ["kayıt", "metin", "AI", "obsidian"];
 
 function OturumSatiri({ o }: { o: Oturum }) {
   const [acik, setAcik] = useState(false);
@@ -342,9 +391,10 @@ function OturumSatiri({ o }: { o: Oturum }) {
   const d = durak(o);
   const durumMetni = (() => {
     switch (o.durum) {
-      case "yerel": return o.hata ? "gönderilemedi" : o.asama ? o.asama.toLocaleLowerCase("tr") : hat.hazir ? "gönderilecek" : "kurulum bekliyor";
+      case "yerel": return o.hata ? (o.mobil ? "bekliyor" : "gönderilemedi") : o.asama ? o.asama.toLocaleLowerCase("tr") : o.mobil ? "metne çevriliyor" : hat.hazir ? "gönderilecek" : "kurulum bekliyor";
       case "gonderiliyor": return "gönderiliyor";
       case "sunucuda": return (o.asama ?? "işleniyor").toLocaleLowerCase("tr");
+      case "ai": return "AI bekliyor";
       case "yazildi": return o.notAdi ? "obsidian'da" : "konuşma yok";
       default: return "hata";
     }
@@ -370,7 +420,7 @@ function OturumSatiri({ o }: { o: Oturum }) {
         {o.ozet && <span className="oturum-ozet" style={{ display: "block" }}>{o.ozet}</span>}
         {!(d === 3 && !hataVar) && (
           <span className="yol" aria-label={`Durum: ${durumMetni}`}>
-            {DURAKLAR.map((ad, i) => (
+            {(o.mobil ? MOBIL_DURAKLAR : DURAKLAR).map((ad, i) => (
               <span key={ad} className={`durak ${i < d ? "gecti" : i === d ? (hataVar ? "hata-durak" : "simdi") : ""}`}>
                 <i />{ad}
               </span>
@@ -381,7 +431,9 @@ function OturumSatiri({ o }: { o: Oturum }) {
       </button>
       {acik && (
         <div className="oturum-eylem">
-          {o.durum !== "yazildi" && <button className="metin-dugme kor" onClick={() => void hat.tekrarDene(o)}>Tekrar dene</button>}
+          {o.durum === "ai" && <button className="metin-dugme kor" onClick={() => void hat.aiAc("claude")}>Claude'da yazdır</button>}
+          {o.durum === "ai" && <button className="metin-dugme kor" onClick={() => void hat.aiAc("chatgpt")}>ChatGPT'de yazdır</button>}
+          {o.durum !== "yazildi" && o.durum !== "ai" && <button className="metin-dugme kor" onClick={() => void hat.tekrarDene(o)}>Tekrar dene</button>}
           <button className="metin-dugme" onClick={() => setKaldirOnay(true)}>Listeden kaldır</button>
         </div>
       )}
@@ -404,6 +456,7 @@ function KaldirmaOnayi({ o, ad, kapat }: { o: Oturum; ad: string; kapat: () => v
         <p className="aciklama">
           {yazildi
             ? "Yalnız bu listeden kalkar. Obsidian'daki not yerinde durur."
+            : o.mobil ? "Not henüz yazılmadı. Metin telefondan silinir ve bu kayıttan not çıkmaz. Geri alınamaz."
             : "Not henüz yazılmadı. Ses telefondan silinir ve bu kayıttan not çıkmaz. Geri alınamaz."}
         </p>
         <div className="satir-eylem">
@@ -424,6 +477,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
   const eslesti = !!a.anahtar;
   const b = hat.baglanti;
   const iz = hat.sesIzi;
+  const mobil = hat.mobil;
 
   return (
     <section>
@@ -431,6 +485,19 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
 
       <div className="satirlar">
         <div className="satir">
+          <div className="satir-bas">
+            <h2>Notu kim yazar</h2>
+            <span className="etiket">{mobil ? "yalnız telefon" : "bilgisayar"}</span>
+          </div>
+          <div className="secim iki" role="radiogroup" aria-label="Kullanım">
+            <button role="radio" aria-checked={!mobil} className="secenek" onClick={() => hat.modSec("pc")}>Bilgisayarımla</button>
+            <button role="radio" aria-checked={mobil} className="secenek" onClick={() => hat.modSec("mobil")}>Yalnız telefonla</button>
+          </div>
+        </div>
+
+        {mobil && <ModelSatiri />}
+
+        {!mobil && <div className="satir">
           <div className="satir-bas">
             <h2>Bağlantı</h2>
             <span className={`etiket ${b.durum === "bagli" ? "" : "soluk"}`}>
@@ -463,7 +530,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
           {hat.eslestirme && (
             <p className={hat.eslestirme.durum === "hata" ? "hata" : "aciklama"}>{hat.eslestirme.metin}</p>
           )}
-        </div>
+        </div>}
 
         <div className="satir">
           <div className="satir-bas">
@@ -507,7 +574,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
           </div>
         )}
 
-        {eslesti && (
+        {eslesti && !mobil && (
           <div className="satir">
             <div className="satir-bas">
               <h2>Hatırlatıcılar</h2>
@@ -526,7 +593,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
         )}
 
 
-        <div className="satir">
+        {!mobil && <div className="satir">
           <div className="satir-bas">
             <h2>Sesin</h2>
             <span className={`etiket ${iz?.var ? "" : "soluk"}`}>{iz?.var ? "tanındı" : "tanıtılmadı"}</span>
@@ -540,9 +607,9 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
             </button>
             {iz?.var && <button className="metin-dugme" onClick={() => void hat.sesIziSil()}>Ses izini sil</button>}
           </div>
-        </div>
+        </div>}
 
-        <div className="satir">
+        {!mobil && <div className="satir">
           <h2>Notu yazan</h2>
           <div className="secim" role="radiogroup" aria-label="Notu yazan AI">
             {Object.entries(YAZICILAR).map(([id, ad]) => {
@@ -557,7 +624,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
               );
             })}
           </div>
-        </div>
+        </div>}
 
         {hat.hesap && (
           <div className="satir">
@@ -603,10 +670,32 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
       </details>
 
       <p className="dipnot">
-        Ses, not yazılınca silinir.{" "}
+        {mobil ? "Ses kaydedilmez; metin, not yazılınca silinir." : "Ses, not yazılınca silinir."}{" "}
         <a href="https://claudian.app/yuzuk/gizlilik" target="_blank" rel="noopener noreferrer">Gizlilik politikası</a>
       </p>
     </section>
+  );
+}
+
+/** Tam mobilde yazıya dökme modeli (whisper.cpp small, ~190 MB). Bir kez iner, SHA-256 ile doğrulanır. */
+function ModelSatiri() {
+  const m = hat.model;
+  useEffect(() => { void hat.modelYukle(); }, []);
+  const mb = (b: number) => `${Math.round(b / 1e6)} MB`;
+  return (
+    <div className="satir">
+      <div className="satir-bas">
+        <h2>Telefonda yazıya dökme</h2>
+        <span className={`etiket ${m?.hazir ? "" : "soluk"}`}>{m?.hazir ? "hazır" : m?.indiriliyor ? "iniyor" : "inmedi"}</span>
+      </div>
+      {m?.indiriliyor && <p className="deger mono">{mb(m.indirilen)} / {mb(m.boyut)}</p>}
+      {!m?.hazir && !m?.indiriliyor && <p className="aciklama">Bir kez, {m ? mb(m.boyut) : "190 MB"}. Wi-Fi'da indir.</p>}
+      {m?.hata && <p className="hata">{m.hata}</p>}
+      <div className="satir-eylem">
+        {!m?.hazir && !m?.indiriliyor && <button className="dugme birincil" onClick={() => void hat.modelIndir()}>İndir</button>}
+        {m?.hazir && <button className="metin-dugme" onClick={() => void hat.modelSil()}>Modeli sil</button>}
+      </div>
+    </div>
   );
 }
 

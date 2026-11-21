@@ -7,8 +7,8 @@ android {
         applicationId "app.claudian.yuzuk"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 13002
-        versionName "0.13.2"
+        versionCode 14000
+        versionName "0.14.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // Çevrimdışı yazıya dökme (whisper.cpp): telefonlar arm64; x86_64 yalnız emülatör için ve yalnız hata ayıklama
         // derlemesinde (0.8.0: yayın APK'sında ~3,6 MB gereksiz yük). Değer buildTypes'ta verilir.
@@ -40,7 +40,8 @@ android {
     buildTypes {
         debug {
             // Test APK'sı kurulu Yüzük'ün verisini veya bağlantısını devralmaz.
-            applicationIdSuffix ".test"
+            // -PemulatorTesti: Firebase dosyasında ".test" istemcisi yok; emülatörde denerken ek almadan derlenir.
+            if (!project.hasProperty("emulatorTesti")) applicationIdSuffix ".test"
             versionNameSuffix "-test"
             resValue "string", "app_name", "Yüzük Test"
             ndk { abiFilters "arm64-v8a", "x86_64" }
@@ -83,7 +84,8 @@ apply from: 'capacitor.build.gradle'
 
 try {
     def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
+    // -PfirebaseYok: telefona yan yana kurulan test paketi (app.claudian.yuzuk.test) Firebase'de kayıtlı değil; push'suz derlenir.
+    if (servicesJSON.text && !project.hasProperty("firebaseYok")) {
         apply plugin: 'com.google.gms.google-services'
     }
 } catch(Exception e) {

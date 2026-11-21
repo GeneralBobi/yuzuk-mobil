@@ -13,6 +13,7 @@ import { yerel, type CanliDurum, type ModelDurumu, type Paylasim } from "./yerel
 import protokol from "./vault/protokol.md?raw";
 import { version as SURUM } from "../package.json";
 import { agIstek } from "./ag";
+import { AI_ADRESI, MOBIL_ISTEM, baslangicModu, protokolSurumu, surumEski, type Mod } from "./mod";
 import { BAKILIYOR, INTERNET_YOK, eslesmeMetni, saglikSonucu, type Baglanti } from "./baglanti";
 
 type NotGirdisi = { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: string; saat?: string; metin: string }[] };
@@ -20,7 +21,8 @@ type NotGirdisi = { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: 
 // Telefon yalnız bulutu bilir (24.09.2026): bulut işi hesabın işlem düğümüne yönlendirir.
 export const VARSAYILAN_SUNUCU = "https://yuzuk-api.claudian.app";
 
-export type Durum = "yerel" | "gonderiliyor" | "sunucuda" | "yazildi" | "hata";
+// "ai": tam mobil modda döküm hazır, notu kullanıcının kendi Claude/ChatGPT'si yazacak (telefonun MCP'si üzerinden).
+export type Durum = "yerel" | "gonderiliyor" | "sunucuda" | "ai" | "yazildi" | "hata";
 
 export interface Oturum {
   id: string;
@@ -43,6 +45,7 @@ export interface Oturum {
   yedek?: string; // seçilen ama çalışmayan araç
   mahrem?: number; // mahrem sayılıp nota gönderilmeyen cümle sayısı (görünür olsun diye)
   otoTekrar?: number; // 0.11.8: hata sonrası kendiliğinden yeniden gönderildi (bir kez)
+  mobil?: boolean; // 0.14.0: tam mobil modda alındı; bilgisayara hiç gitmez
 }
 
 export interface SesIzi {
@@ -63,6 +66,8 @@ export interface HesapBilgisi {
 /** Oturumun dört duraklı yolu: telefonda · bulutta · yazılıyor · Obsidian'da. */
 export function durak(o: Oturum): number {
   if (o.durum === "yazildi") return 3;
+  if (o.durum === "ai") return 2;
+  if (o.mobil) return o.asama ? 1 : 0;
   if (o.durum === "sunucuda") return o.asama === "Sırada" ? 1 : 2;
   if (o.durum === "gonderiliyor") return 1;
   return 0;
@@ -75,7 +80,11 @@ export interface Ayarlar {
   vaultAdi?: string;
   altKlasor: string;
   yazici: string; // notu yazan AI: claude | codex | gemini
+  /** 0.14.0 (21.11.2026, Boran): "PC ile mi, yalnız telefon mu". Tanımsız = ilk açılış sorusu henüz cevaplanmadı. */
+  mod?: Mod;
 }
+
+export type { Mod };
 
 export const YAZICILAR: Record<string, string> = { claude: "Claude", codex: "ChatGPT", gemini: "Antigravity" };
 
@@ -107,7 +116,10 @@ function oku<T>(anahtar: string, varsayilan: T): T {
 }
 
 class Hat {
-  ayarlar: Ayarlar = { ...{ sunucu: VARSAYILAN_SUNUCU, anahtar: "", altKlasor: "Yüzük", yazici: "claude" }, ...oku<Partial<Ayarlar>>("ayarlar", {}) };
+  ayarlar: Ayarlar = (() => {
+    const a: Ayarlar = { ...{ sunucu: VARSAYILAN_SUNUCU, anahtar: "", altKlasor: "Yüzük", yazici: "claude" }, ...oku<Partial<Ayarlar>>("ayarlar", {}) };
+    return { ...a, mod: baslangicModu(a) };
+  })();
   kuruluYazicilar: string[] | null = null; // sunucunun bilgisayarında kurulu olanlar
   /** 0.13.2: neden seçilemiyor — "giris" (kurulu, giriş yok) ya da "yok" (kurulu değil). Eski motor göndermez. */
   yaziciDurum: Record<string, string> | null = null;
@@ -152,7 +164,12 @@ class Hat {
   private ilerliyor = false;
   private arkaKur: Promise<void> = Promise.resolve();
 
+  get mobil() {
+    return this.ayarlar.mod === "mobil";
+  }
+
   get hazir() {
+    if (this.mobil) return !!this.ayarlar.vault;
     return !!(this.ayarlar.sunucu && this.ayarlar.anahtar && this.ayarlar.vault);
   }
 
@@ -172,9 +189,9 @@ class Hat {
     // Canlı not kaydı (döküm) uygulama açıkken gider.
     const ayar = { sunucu: this.ayarlar.sunucu, anahtar: this.ayarlar.anahtar, vault: this.ayarlar.vault ?? "",
       altKlasor: this.ayarlar.altKlasor || "Yüzük", yazici: this.ayarlar.yazici || "claude",
-      isler: this.oturumlar.filter(o => o.durum === "sunucuda").map(o =>
+      isler: this.oturumlar.filter(o => o.durum === "sunucuda" && !o.mobil).map(o =>
         ({ id: o.id, sunucuId: o.sunucuId, yol: o.yol, baslangic: o.baslangic, baslik: o.baslik })),
-      gonderilecek: this.oturumlar.filter(o => (o.durum === "yerel" || o.durum === "gonderiliyor") && o.kaynak !== "canli").map(o =>
+      gonderilecek: this.oturumlar.filter(o => (o.durum === "yerel" || o.durum === "gonderiliyor") && o.kaynak !== "canli" && !o.mobil).map(o =>
         ({ id: o.id, yol: o.yol, baslangic: o.baslangic, baslik: o.baslik })) };
     this.arkaKur = this.arkaKur.then(async () => {
       await yerel.arkaPlanKur({ ayar });
@@ -193,7 +210,7 @@ class Hat {
       this.kaydediyor = true;
       this.kayitBaslangic = c.baslangicMs;
       this.canli = c;
-      this.seviyeIzle();
+      this.canliIzle();
     }
     const d = await yerel.kayitDurumu().catch(() => null);
     if (d?.calisiyor) {
@@ -201,8 +218,10 @@ class Hat {
       this.kayitBaslangic = d.baslangicMs;
       this.seviyeIzle();
     }
-    // 0.11.0: çevrimdışı telefon modeli kalktı (ses dosyası kaldığı için gereksiz); 0.10'da indirildiyse yer açılır.
-    void yerel.modelSil().catch(() => undefined);
+    // 0.11.0: PC yolunda telefon modeli gereksiz; 0.10'da indirildiyse yer açılır. 0.14.0: tam mobil modda model
+    // yazıya dökmenin kendisidir, silinmez. Mod henüz seçilmediyse de dokunulmaz (kullanıcı mobil seçebilir).
+    if (this.ayarlar.mod === "pc") void yerel.modelSil().catch(() => undefined);
+    else void this.modelYukle();
     // Uygulama kapanırken "gönderiliyor"da kalan oturum yeniden gönderilir.
     for (const o of this.oturumlar) if (o.durum === "gonderiliyor") o.durum = "yerel";
     this.sakla();
@@ -381,7 +400,19 @@ class Hat {
    *  oluşur; boş şablon not açılmaz. Dosya zaten varsa (masaüstü kurmuş ya da kullanıcı değiştirmiş) dokunulmaz. */
   async iskeletKur() {
     if (!this.ayarlar.vault) return;
-    await yerel.dosyaYaz({ agac: this.ayarlar.vault, yol: "Vault Protokolü.md", icerik: protokol, ekle: false, yoksa: true })
+    const agac = this.ayarlar.vault;
+    // 21.11.2026: telefon yalnız dosya yoksa yazıyordu; ilk kurulumdaki eski protokol (0.27.0) bilgisayarsız kullanıcıda hiç
+    // güncellenmiyordu. Telefondaki dosya Claudian'ın daha eski bir sürümüyse güncellenir; sürümü okunamayan ya da daha
+    // yeni olan (bilgisayardan eşitlenen) dosyaya dokunulmaz.
+    const mevcut = await yerel.vaultOku({ agac, yol: "Vault Protokolü.md" }).then((r) => r.icerik).catch(() => null);
+    if (mevcut !== null && !surumEski(protokolSurumu(mevcut), protokolSurumu(protokol))) return;
+    if (mevcut !== null) {
+      // Eski dosyada kullanıcının kendi eklemesi olabilir: üzerine yazmadan önce masaüstünün kuralıyla aynı adla
+      // ("(yours tarih)") bir kopya bırakılır. Masaüstü Claudian, kopya kendi ürettiği metinse onu toplar; değilse korur.
+      const gun = new Date().toLocaleDateString("sv-SE");
+      await yerel.dosyaYaz({ agac, yol: `Vault Protokolü (yours ${gun}).md`, icerik: mevcut, ekle: false, yoksa: true }).catch(() => undefined);
+    }
+    await yerel.dosyaYaz({ agac, yol: "Vault Protokolü.md", icerik: protokol, ekle: false, yoksa: mevcut === null })
       .catch(() => undefined);
   }
 
@@ -693,6 +724,7 @@ class Hat {
       this.yayinla();
       return;
     }
+    if (this.mobil) return this.mobilKayitBaslat();
     // 0.11.0 (29.09.2026, Boran'ın A kararı): not kaydı yine ses dosyasıdır. Ses, not Obsidian'a yazılana kadar
     // telefonda durur, sonra silinir; bağlantı kopsa da kayıt kaybolmaz. Canlı parça yolu yeni kayıt başlatmaz.
     try {
@@ -740,7 +772,113 @@ class Hat {
     void tik();
   }
 
+  // ---------------- tam mobil (0.14.0) ----------------
+  //
+  // Bilgisayar yok. Mikrofon sesi bellekte parçalanır, her parça telefonda whisper.cpp ile metne döner ve atılır
+  // (CanliKayitServisi, sunucusuz). Diskte yalnız döküm (metin) kalır. Döküm bitince AI'a açılır; notu kullanıcının
+  // kendi Claude/ChatGPT'si telefonun MCP'si üzerinden yazar (yuzuk_save_note). Döküm, not yazılana kadar telefonda durur.
+
+  /** İlk açılış sorusu ve Ayarlar'daki değiştirme. Mobil seçilince model hemen inmeye başlar. */
+  modSec(mod: Mod) {
+    this.ayarla({ mod });
+    if (mod === "mobil") void this.modelIndir();
+  }
+
+  private async mobilKayitBaslat() {
+    this.model = await yerel.modelDurumu().catch(() => this.model);
+    if (!this.model?.hazir) {
+      this.uyari = this.model?.indiriliyor
+        ? "Yazıya dökme modeli iniyor; bitince kayda başlayabilirsin."
+        : "Önce telefondaki yazıya dökme modelini indir (Ayarlar → Telefonda yazıya dökme).";
+      this.yayinla();
+      return;
+    }
+    try {
+      // Sunucu ve anahtar boş: servis bilgisayarı hiç denemez, her parça telefonda metne döner.
+      // Yalnız hata ayıklama derlemesi testPcm'i okur (CanliKayitServisi BuildConfig.DEBUG); yayında yok sayılır.
+      await yerel.canliBaslat({ sunucu: "", anahtar: "", testPcm: localStorage.getItem("testPcm") ?? undefined });
+      const c = await yerel.canliDurumu();
+      if (!c.calisiyor) throw new Error(c.hata ?? "bilinmeyen hata");
+      this.kaydediyor = true;
+      this.kayitBaslangic = c.baslangicMs;
+      this.canli = c;
+      this.canliIzle();
+    } catch (e) {
+      this.uyari = `Kayıt başlamadı: ${(e as Error).message}`;
+    }
+    this.yayinla();
+  }
+
+  /** Canlı kayıtta ses düzeyi ve parça durumu servisten okunur (kayitDurumu eski ses dosyası servisine aittir). */
+  private canliIzle() {
+    const tik = async () => {
+      if (!this.kaydediyor) { this.seviye = 0; return; }
+      const c = await yerel.canliDurumu().catch(() => null);
+      if (c) { this.canli = c; this.seviye = c.seviye ?? 0; }
+      this.okuma++;
+      this.yayinla();
+      window.setTimeout(tik, 250);
+    };
+    void tik();
+  }
+
+  /** Tam mobil oturumlar: döküm bitince AI'a açılır; AI'ın yazdığı notun makbuzu listeye işlenir. */
+  private async mobilIlerlet() {
+    const r = await yerel.mobilTeslimler().catch(() => null);
+    const alinan: string[] = [];
+    for (const [id, t] of Object.entries(r?.teslimler ?? {})) {
+      const o = this.oturumlar.find((x) => x.id === id);
+      alinan.push(id);
+      if (!o) continue;
+      o.durum = "yazildi";
+      o.notAdi = t.ad;
+      o.baslik = t.baslik || o.baslik;
+      o.ozet = t.ozet || undefined;
+      o.hatirlatici = t.hatirlatici || undefined;
+      o.mahrem = t.mahrem ?? 0; // telefonda kural katmanının çıkardığı cümle sayısı (listede görünür)
+      o.asama = undefined; o.hata = undefined;
+    }
+    if (alinan.length) { this.sakla(); await yerel.mobilOnayla({ ids: alinan }).catch(() => undefined); }
+    for (const o of this.oturumlar.filter((o) => o.mobil && o.durum === "yerel")) {
+      let d: { dokum: string; bitti: boolean; cumle: number };
+      try { d = await yerel.dokumOku({ yol: o.yol }); }
+      catch (e) { o.durum = "hata"; o.hata = `Döküm okunamadı — ${(e as Error).message}`; this.sakla(); continue; }
+      const servis = await yerel.canliDurumu().catch(() => null);
+      if (!d.bitti && servis?.isleniyor && servis.dokum === o.yol) {
+        o.asama = servis.bekleyen ? `${servis.bekleyen} parça metne çevriliyor` : "Son parçalar metne çevriliyor";
+        this.yayinla();
+        continue;
+      }
+      if (!d.cumle) {
+        o.durum = "yazildi"; o.asama = undefined; o.baslik = o.baslik ?? "Sessiz kayıt";
+        o.ozet = "Not alınacak konuşma bulunamadı; vault'a bir şey yazılmadı.";
+        await yerel.dosyaSil({ yol: o.yol }).catch(() => undefined);
+        this.sakla();
+        continue;
+      }
+      try {
+        await yerel.mobilEkle({ id: o.id, yol: o.yol, baslangic: o.baslangic, sureSn: o.sureSn ?? 0,
+          vault: this.ayarlar.vault ?? "", altKlasor: this.ayarlar.altKlasor || "Yüzük" });
+        o.durum = "ai"; o.asama = undefined; o.hata = undefined;
+        void yerel.bildir({ baslik: "Kayıt metne döndü", metin: "Notu yazdırmak için Yüzük'te Claude ya da ChatGPT'ye dokun." }).catch(() => undefined);
+      } catch (e) {
+        o.hata = `AI'a açılamadı — ${(e as Error).message}. Döküm telefonda duruyor.`;
+      }
+      this.sakla();
+    }
+  }
+
+  /** Bekleyen kaydı seçilen AI uygulamasında hazır istemle açar; istem panoya da kopyalanır. */
+  async aiAc(ai: "claude" | "chatgpt") {
+    // Android 15+: telefonun MCP servisi (dataSync) günde 6 saatle sınırlı; süre dolunca sistem durdurur. Kota uygulama
+    // öndeyken sıfırlanır, bu yüzden AI açılmadan hemen önce servis yeniden başlatılır (bağlantı açıksa).
+    await yerel.dogrudanAyarla({}).catch(() => undefined);
+    try { await navigator.clipboard.writeText(MOBIL_ISTEM); } catch { /* pano yok */ }
+    window.open(AI_ADRESI[ai](MOBIL_ISTEM), "_blank");
+  }
+
   async kayitDurdur() {
+    if (this.mobil || this.canli) return this.canliDurdur();
     const r = await yerel.kayitDurdur();
     const bas = this.kayitBaslangic ?? Date.now();
     this.kaydediyor = false;
@@ -756,7 +894,31 @@ class Hat {
     }
   }
 
+  private async canliDurdur() {
+    const r = await yerel.canliDurdur();
+    const bas = this.kayitBaslangic ?? Date.now();
+    this.kaydediyor = false;
+    this.kayitBaslangic = null;
+    this.seviye = 0;
+    this.canli = null;
+    if (r.dokum) {
+      this.oturumlar.unshift({ id: String(bas), yol: r.dokum, baslangic: new Date(bas).toISOString(), kaynak: "canli",
+        durum: "yerel", sureSn: r.sureSn, mobil: this.mobil || undefined, asama: "Son parçalar metne çevriliyor" });
+      this.sakla();
+      void this.ilerlet();
+    } else {
+      this.uyari = "Kayıt boş çıktı.";
+      this.yayinla();
+    }
+  }
+
   async iceAktar() {
+    if (this.mobil) {
+      // Dosya çözmek (mp3/mp4 → PCM) telefonda henüz yok; ses dosyası bilgisayara gitmeden nota dönemez.
+      this.uyari = "Dosyadan not çıkarma şimdilik bilgisayarla çalışır.";
+      this.yayinla();
+      return;
+    }
     this.uyari = null;
     const r = await yerel.dosyaSec();
     if (r.yol) this.dosyaEkle(r.yol, r.ad);
@@ -783,21 +945,28 @@ class Hat {
 
   /** Bekleyen her oturumu bir adım ileri taşır: gönder, durum sor, hazırsa Obsidian'a yaz. */
   async ilerlet() {
-    if (this.ilerliyor || !this.hazir) return;
+    if (this.ilerliyor) return;
+    const pcHazir = !!(this.ayarlar.sunucu && this.ayarlar.anahtar && this.ayarlar.vault);
+    const mobilVar = this.oturumlar.some((o) => o.mobil && o.durum !== "yazildi");
+    if (!pcHazir && !mobilVar) return;
     this.ilerliyor = true;
     try {
-      await this.arkaPlanTeslimleriniAl();
-      for (const o of this.oturumlar.filter((o) => o.durum === "yerel")) await this.gonder(o);
-      for (const o of this.oturumlar.filter((o) => o.durum === "sunucuda")) await this.sor(o);
+      if (mobilVar) await this.mobilIlerlet();
+      if (pcHazir) {
+        await this.arkaPlanTeslimleriniAl();
+        for (const o of this.oturumlar.filter((o) => o.durum === "yerel" && !o.mobil)) await this.gonder(o);
+        for (const o of this.oturumlar.filter((o) => o.durum === "sunucuda" && !o.mobil)) await this.sor(o);
+      }
     } finally {
       this.ilerliyor = false;
     }
     if (this.yoklama) window.clearTimeout(this.yoklama);
     // Döküm hâlâ telefonda metne dönüyorsa ya da bağlantı yoksa aralıkla yeniden denenir: not kaybolmaz.
-    const sunucuda = this.oturumlar.some((o) => o.durum === "sunucuda");
+    const sunucuda = this.oturumlar.some((o) => o.durum === "sunucuda" || (o.mobil && o.durum === "yerel"));
     // Gönderilemeyen kayıt da (bağlantı koptu, bilgisayar kapalı) aralıkla kendiliğinden yeniden denenir:
     // 27.09'da "Software caused connection abort" sonrası kaydın elle yeniden gönderilmesi gerekmişti.
-    const telefonda = this.oturumlar.some((o) => o.durum === "yerel");
+    // Tam mobilde AI'ın notu yazması beklenir; makbuz için 30 sn'de bir bakılır.
+    const telefonda = this.oturumlar.some((o) => (o.durum === "yerel" && !o.mobil) || o.durum === "ai");
     if (sunucuda || telefonda) this.yoklama = window.setTimeout(() => void this.ilerlet(), sunucuda ? 5000 : 30000);
   }
 
@@ -839,6 +1008,12 @@ class Hat {
   }
 
   async tekrarDene(o: Oturum) {
+    if (o.mobil) {
+      o.durum = "yerel"; o.hata = undefined;
+      this.sakla();
+      void this.ilerlet();
+      return;
+    }
     // Bir iş zaten kabul edildiyse aynı sesi ikinci kez göndermek yerine sonucu yeniden al.
     if (o.sunucuId && o.durum !== "hata") {
       o.durum = "sunucuda";
@@ -860,6 +1035,7 @@ class Hat {
   }
 
   async kaldir(o: Oturum) {
+    if (o.mobil) await yerel.mobilCikar({ id: o.id }).catch(() => undefined);
     await yerel.dosyaSil({ yol: o.yol }).catch(() => undefined);
     this.oturumlar = this.oturumlar.filter((x) => x !== o);
     this.sakla();
@@ -1135,7 +1311,7 @@ class Hat {
     o.notAdi = String(s.pc_notu).split("/").pop();
     o.baslik = s.baslik?.trim() || o.baslik;
     const satirlar = (s.not_md ?? "").split("\n");
-    const ozetBasi = satirlar.findIndex((l) => /^#{2,4}\s*Özet/i.test(l));
+    const ozetBasi = satirlar.findIndex((l) => /^#{2,4}\s*(Özet|Summary)/i.test(l));
     const ilk = ozetBasi >= 0 ? satirlar.slice(ozetBasi + 1).find((l) => l.trim() && !l.startsWith("#")) : undefined;
     o.ozet = ilk ? ilk.replace(/^[-*]\s*/, "").replace(/\*\*/g, "").split(/(?<=[.!?])\s/)[0].slice(0, 180) : undefined;
   }
@@ -1158,7 +1334,7 @@ class Hat {
     o.baslik = baslik;
     // Listede notun kendi özeti görünür: "Özet" başlığı altındaki ilk cümle; yoksa bölüm başlıkları.
     const satirlar = (s.not_md ?? "").split("\n");
-    const ozetBasi = satirlar.findIndex((l) => /^#{2,4}\s*Özet/i.test(l));
+    const ozetBasi = satirlar.findIndex((l) => /^#{2,4}\s*(Özet|Summary)/i.test(l));
     const ilk = ozetBasi >= 0 ? satirlar.slice(ozetBasi + 1).find((l) => l.trim() && !l.startsWith("#")) : undefined;
     o.ozet = ilk
       ? ilk.replace(/^[-*]\s*/, "").replace(/\*\*/g, "").split(/(?<=[.!?])\s/)[0].slice(0, 180)
