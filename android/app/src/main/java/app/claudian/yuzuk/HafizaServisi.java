@@ -69,6 +69,8 @@ public class HafizaServisi extends Service {
     @Override
     public void onDestroy() {
         durdur = true;
+        RelaySoketi s = soket;
+        if (s != null) s.close();
         if (is != null) is.interrupt();
         calisiyor = false;
         baglanti = "kapali";
@@ -82,6 +84,61 @@ public class HafizaServisi extends Service {
         stopSelf();
     }
 
+    /** 0.15.2: relay'in soket yolunu desteklemediği an; on dakika uzun yoklamayla devam edilir, sonra yeniden denenir. */
+    private long soketsiz = 0L;
+    private volatile RelaySoketi soket;
+
+    /**
+     * 0.15.2 (22.11.2026): relay'e tek WebSocket; relay boştayken uyur, günlük kotası dolmaz. AI'ın isteği soketten gelir,
+     * cevap soketten döner. Sessizlikte 25 sn'de bir "ping" gider (Cloudflare kendisi cevaplar); 75 sn hiçbir şey gelmezse
+     * bağlantı yeniden kurulur. true: soket hazır olduktan sonra kapandı (yeniden bağlanılır); false: soket desteklenmiyor.
+     */
+    private boolean soketleCalis(String sir, String taban) throws Exception {
+        RelaySoketi ws;
+        try { ws = RelaySoketi.baglan(taban.replaceFirst("^http", "ws") + "/__device/ws", 25_000); }
+        catch (java.io.IOException e) { if (String.valueOf(e.getMessage()).startsWith("desteklenmiyor")) return false; throw e; }
+        soket = ws;
+        try {
+            ws.gonder(new JSONObject().put("tur", "giris").put("anahtar", sir).toString());
+            long sonGelen = System.currentTimeMillis();
+            boolean hazir = false;
+            while (!durdur) {
+                String m;
+                try { m = ws.oku(); }
+                catch (java.net.SocketTimeoutException t) {
+                    if (System.currentTimeMillis() - sonGelen > 75_000) return hazir;
+                    ws.gonder("ping");
+                    continue;
+                }
+                if (m == null) return hazir;
+                sonGelen = System.currentTimeMillis();
+                if ("pong".equals(m)) continue;
+                JSONObject j;
+                try { j = new JSONObject(m); } catch (Exception e) { continue; }
+                if ("hazir".equals(j.optString("tur"))) {
+                    hazir = true;
+                    baglanti = "cevrimici";
+                    sonHata = null;
+                    continue;
+                }
+                if ("istek".equals(j.optString("tur"))) {
+                    final JSONObject istek = j;
+                    new Thread(() -> {
+                        try {
+                            JSONObject y = DogrudanCihaz.isle(this, istek);
+                            y.put("tur", "cevap").put("id", istek.getString("id"));
+                            ws.gonder(y.toString());
+                        } catch (Exception ignored) { }
+                    }, "hafiza-istek").start();
+                }
+            }
+            return hazir;
+        } finally {
+            soket = null;
+            ws.close();
+        }
+    }
+
     private void dongu() {
         int deneme = 0;
         while (!durdur) {
@@ -89,6 +146,13 @@ public class HafizaServisi extends Service {
                 JSONObject d = DogrudanCihaz.durum(this);
                 if (!d.optBoolean("acik")) break;
                 String sir = d.getString("sir"), taban = DogrudanCihaz.taban(d);
+                if (soketsiz == 0L || System.currentTimeMillis() - soketsiz > 600_000L) {
+                    soketsiz = 0L;
+                    baglanti = "baglaniyor";
+                    if (soketleCalis(sir, taban)) { deneme = 0; continue; }
+                    if (durdur) break;
+                    soketsiz = System.currentTimeMillis();
+                }
                 if (!"cevrimici".equals(baglanti)) {
                     baglanti = "baglaniyor";
                     istek(taban + "/__device/connect", sir, "{}", 15_000);
