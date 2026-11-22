@@ -16,17 +16,24 @@ import java.security.MessageDigest;
  * SHA-256 ile doğrulanır; doğrulanmayan dosya kullanılmaz.
  */
 public final class YerelWhisper {
-    static final String MODEL = "ggml-small-q5_1.bin";
-    static final String ADRES = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/" + MODEL;
-    static final String SHA256 = "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb";
-    static final long BOYUT = 190085487L;
+    /** 0.15.0 (22.11.2026, Boran): iki model. "small" doğruluk için (≈190 MB), "base" yavaş telefon için (≈60 MB).
+     *  Hangisinin kullanılacağına ilk kullanımdaki hız testi karar verir; kullanıcı Ayarlar'dan değiştirebilir. */
+    static final class Model {
+        final String ad, dosya, sha256; final long boyut;
+        Model(String ad, String dosya, String sha256, long boyut) { this.ad = ad; this.dosya = dosya; this.sha256 = sha256; this.boyut = boyut; }
+        String adres() { return "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/" + dosya; }
+    }
+    static final Model KUCUK = new Model("base", "ggml-base-q5_1.bin", "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898", 59707625L);
+    static final Model BUYUK = new Model("small", "ggml-small-q5_1.bin", "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb", 190085487L);
 
     static volatile long indirilen = 0L;
     static volatile boolean indiriliyor = false;
     static volatile String indirmeHatasi = null;
+    static volatile String indirilenModel = null;
 
     private static boolean kutuphane = false;
     private static long ctx = 0L;
+    private static String ctxModel = null;
 
     static native long yukle(String yol);
     static native void birak(long ctx);
@@ -34,24 +41,103 @@ public final class YerelWhisper {
 
     private YerelWhisper() { }
 
-    static File dosya(Context c) {
-        return new File(new File(c.getFilesDir(), "modeller"), MODEL);
+    private static android.content.SharedPreferences depo(Context c) { return c.getSharedPreferences("model", Context.MODE_PRIVATE); }
+
+    private static Boolean uyumluMu = null;
+
+    /** Kütüphane armv8.2-a+fp16+dotprod için derlenir (CMakeLists). Bu komutları bilmeyen işlemcide (eski ARMv8.0 çekirdekler,
+     *  çeviriyle çalışan emülatör) model yüklenince uygulama SIGILL ile kapanır. 0.15.0: önce /proc/cpuinfo'ya bakılır;
+     *  destek yoksa yerel model hiç çalıştırılmaz, bulut ya da bilgisayar önerilir. */
+    static synchronized boolean uyumlu() {
+        if (uyumluMu != null) return uyumluMu;
+        boolean dp = false, hp = false;
+        try (java.io.BufferedReader b = new java.io.BufferedReader(new java.io.FileReader("/proc/cpuinfo"))) {
+            String satir;
+            while ((satir = b.readLine()) != null) {
+                if (!satir.startsWith("Features")) continue;
+                java.util.List<String> f = java.util.Arrays.asList(satir.substring(satir.indexOf(':') + 1).trim().split(" +"));
+                dp = f.contains("asimddp");
+                hp = f.contains("fphp") && f.contains("asimdhp");
+                break;
+            }
+        } catch (Exception ignored) { }
+        uyumluMu = dp && hp;
+        return uyumluMu;
     }
 
-    static boolean hazir(Context c) {
-        File f = dosya(c);
-        return f.exists() && f.length() == BOYUT;
+    static Model model(String ad) { return "base".equals(ad) ? KUCUK : BUYUK; }
+
+    /** Seçili model (varsayılan small; 0.14.0 kurulumları small indirmişti). */
+    static Model secili(Context c) { return model(depo(c).getString("secili", "small")); }
+
+    static void sec(Context c, String ad) {
+        depo(c).edit().putString("secili", model(ad).ad).putBoolean("hizSuruyor", false).remove("hiz").apply();
+        synchronized (YerelWhisper.class) { if (ctx != 0L) { birak(ctx); ctx = 0L; ctxModel = null; } }
+    }
+
+    static File dosya(Context c, Model m) {
+        return new File(new File(c.getFilesDir(), "modeller"), m.dosya);
+    }
+
+    static File dosya(Context c) { return dosya(c, secili(c)); }
+
+    static boolean hazir(Context c, Model m) {
+        File f = dosya(c, m);
+        return f.exists() && f.length() == m.boyut;
+    }
+
+    static boolean hazir(Context c) { return hazir(c, secili(c)); }
+
+    /** Son hız testi: {model, oran, sure_ms, zaman} ya da null. oran = çözme süresi / ses süresi (1'den büyükse geride kalır). */
+    static org.json.JSONObject hiz(Context c) {
+        try {
+            if (!uyumlu()) return new org.json.JSONObject().put("model", secili(c).ad).put("oran", 99).put("uyumsuz", true);
+            // Test sırasında uygulama kapandıysa (yerel kod çöktü) bir daha otomatik denenmez; çok yavaş sayılır.
+            if (depo(c).getBoolean("hizSuruyor", false) && !testte)
+                return new org.json.JSONObject().put("model", secili(c).ad).put("oran", 99).put("cokme", true);
+            String h = depo(c).getString("hiz", null);
+            return h == null ? null : new org.json.JSONObject(h);
+        } catch (Exception e) { return null; }
+    }
+
+    private static volatile boolean testte = false;
+
+    /** 10 saniyelik deneme sesiyle seçili modelin hızını ölçer. Konuşma değil, kısık gürültülü bir ses dalgası: whisper'ın
+     *  kodlayıcısı her parçada aynı işi yapar, ölçülen süre gerçek kayda yakındır. Sonuç saklanır. */
+    static synchronized org.json.JSONObject hizTesti(Context c) throws Exception {
+        if (!hazir(c)) throw new Exception("model hazır değil");
+        if (!uyumlu()) throw new Exception("bu işlemci telefonda yazıya dökmeyi desteklemiyor");
+        depo(c).edit().putBoolean("hizSuruyor", true).commit();
+        testte = true;
+        float[] o = new float[16000 * 10];
+        java.util.Random r = new java.util.Random(7);
+        for (int i = 0; i < o.length; i++) {
+            double t = i / 16000.0;
+            o[i] = (float) (0.08 * Math.sin(2 * Math.PI * (180 + 40 * Math.sin(2 * Math.PI * 0.7 * t)) * t) * (0.6 + 0.4 * Math.sin(2 * Math.PI * 3 * t)) + 0.01 * r.nextGaussian());
+        }
+        metin(c, new float[16000], "tr"); // modeli belleğe yükler; yükleme süresi teste girmez
+        long bas = System.nanoTime();
+        String s = metin(c, o, "tr");
+        long ms = (System.nanoTime() - bas) / 1_000_000L;
+        if (s == null) { testte = false; depo(c).edit().putBoolean("hizSuruyor", false).commit(); throw new Exception("model çalıştırılamadı"); }
+        org.json.JSONObject j = new org.json.JSONObject().put("model", secili(c).ad).put("sure_ms", ms)
+                .put("oran", Math.round(ms / 100.0) / 100.0).put("zaman", System.currentTimeMillis());
+        depo(c).edit().putString("hiz", j.toString()).putBoolean("hizSuruyor", false).commit();
+        testte = false;
+        return j;
     }
 
     /** Parçayı metne çevirir. Model yoksa ya da yüklenemezse null: çağıran parçayı bekletir. */
     static synchronized String metin(Context c, float[] ornekler, String dil) {
-        if (!hazir(c)) return null;
+        if (!hazir(c) || !uyumlu()) return null;
         try {
             if (!kutuphane) {
                 System.loadLibrary("yuzukwhisper");
                 kutuphane = true;
             }
-            if (ctx == 0L) ctx = yukle(dosya(c).getAbsolutePath());
+            String ad = secili(c).ad;
+            if (ctx != 0L && !ad.equals(ctxModel)) { birak(ctx); ctx = 0L; }
+            if (ctx == 0L) { ctx = yukle(dosya(c).getAbsolutePath()); ctxModel = ad; }
             if (ctx == 0L) return null;
             return coz(ctx, ornekler, dil);
         } catch (Throwable t) {
@@ -60,17 +146,20 @@ public final class YerelWhisper {
     }
 
     /** Model indirme; kısmi dosya .part olarak kalır ve doğrulanınca yerine konur. */
-    static void indir(Context c) {
-        if (indiriliyor || hazir(c)) return;
+    static void indir(Context c) { indir(c, secili(c)); }
+
+    static void indir(Context c, Model m) {
+        if (indiriliyor || hazir(c, m)) return;
+        indirilenModel = m.ad;
         indiriliyor = true;
         indirmeHatasi = null;
         indirilen = 0L;
         new Thread(() -> {
-            File hedef = dosya(c);
-            File kismi = new File(hedef.getParentFile(), MODEL + ".part");
+            File hedef = dosya(c, m);
+            File kismi = new File(hedef.getParentFile(), m.dosya + ".part");
             try {
                 hedef.getParentFile().mkdirs();
-                HttpURLConnection b = (HttpURLConnection) new URL(ADRES).openConnection();
+                HttpURLConnection b = (HttpURLConnection) new URL(m.adres()).openConnection();
                 b.setConnectTimeout(15000);
                 b.setReadTimeout(60000);
                 b.setInstanceFollowRedirects(true);
@@ -87,7 +176,7 @@ public final class YerelWhisper {
                 }
                 StringBuilder s = new StringBuilder();
                 for (byte x : md.digest()) s.append(String.format("%02x", x));
-                if (!SHA256.equals(s.toString()) || kismi.length() != BOYUT) {
+                if (!m.sha256.equals(s.toString()) || kismi.length() != m.boyut) {
                     kismi.delete();
                     throw new Exception("model doğrulanamadı; silindi");
                 }
@@ -100,11 +189,20 @@ public final class YerelWhisper {
         }, "yuzuk-model").start();
     }
 
+    /** Bütün modelleri siler (PC moduna geçişte yer açılır). */
     static void sil(Context c) {
         synchronized (YerelWhisper.class) {
-            if (ctx != 0L) { birak(ctx); ctx = 0L; }
+            if (ctx != 0L) { birak(ctx); ctx = 0L; ctxModel = null; }
         }
-        dosya(c).delete();
+        dosya(c, KUCUK).delete();
+        dosya(c, BUYUK).delete();
+        depo(c).edit().remove("hiz").apply();
+    }
+
+    /** Seçili olmayan modeli siler (küçük modele geçince 190 MB geri gelir). */
+    static void digeriniSil(Context c) {
+        Model m = secili(c);
+        dosya(c, m == KUCUK ? BUYUK : KUCUK).delete();
     }
 
     /** Test ve teşhis için: dosyanın SHA-256'sı. */

@@ -132,6 +132,8 @@ class Hat {
   arkaPlanHatasi: string | null = null;
   canli: CanliDurum | null = null; // süren kaydın parça durumu (kaçı bilgisayarda, kaçı telefonda metne döndü)
   model: ModelDurumu | null = null; // çevrimdışı yazıya dökme modeli
+  /** 0.15.0: ilk kullanımda 10 sn'lik hız testi ("calisiyor" sürerken). */
+  hizTesti: "yok" | "calisiyor" | "hata" = "yok";
   eslestirme: { durum: "bekliyor" | "tamam" | "hata"; metin: string } | null = null;
   // Google denemesi ayrı API adresinde derlenir; normal sürümde düğme ve adres yoktur.
   googleTestAdresi: string | null = /^https:\/\/yuzuk-test\.claudian\.app$/.test(import.meta.env.VITE_GOOGLE_TEST_API ?? "") ? import.meta.env.VITE_GOOGLE_TEST_API : null;
@@ -164,8 +166,14 @@ class Hat {
   private ilerliyor = false;
   private arkaKur: Promise<void> = Promise.resolve();
 
+  /** Not telefonda, kullanıcının AI'ıyla yazılır: "mobil" ve 0.15.0'dan beri "bulut" [beta]. */
   get mobil() {
-    return this.ayarlar.mod === "mobil";
+    return this.ayarlar.mod === "mobil" || this.ayarlar.mod === "bulut";
+  }
+
+  /** 0.15.0 [beta]: konuşma Claudian bulutunun GPU'sunda metne döner (hesap anahtarı gerekir). */
+  get bulut() {
+    return this.ayarlar.mod === "bulut";
   }
 
   get hazir() {
@@ -222,6 +230,7 @@ class Hat {
     // yazıya dökmenin kendisidir, silinmez. Mod henüz seçilmediyse de dokunulmaz (kullanıcı mobil seçebilir).
     if (this.ayarlar.mod === "pc") void yerel.modelSil().catch(() => undefined);
     else void this.modelYukle();
+    if (this.bulut) void this.bulutDene();
     // Uygulama kapanırken "gönderiliyor"da kalan oturum yeniden gönderilir.
     for (const o of this.oturumlar) if (o.durum === "gonderiliyor") o.durum = "yerel";
     this.sakla();
@@ -744,6 +753,35 @@ class Hat {
     this.model = await yerel.modelDurumu().catch(() => null);
     this.yayinla();
     if (this.model?.indiriliyor) window.setTimeout(() => void this.modelYukle(), 1000);
+    else void this.hizTestiGerekirse();
+  }
+
+  /** 0.15.0 (22.11.2026, Boran): model indikten sonra bir kez 10 sn'lik hız testi. Seçili modelin sonucu yoksa çalışır. */
+  async hizTestiGerekirse() {
+    const m = this.model;
+    if (!m?.hazir || m.uyumlu === false || this.hizTesti === "calisiyor" || this.kaydediyor || this.ayarlar.mod === "pc" || !this.ayarlar.mod) return;
+    if (m.hiz && m.hiz.model === m.model) return;
+    await this.hizOlc();
+  }
+
+  async hizOlc() {
+    if (this.hizTesti === "calisiyor" || this.kaydediyor) return;
+    this.hizTesti = "calisiyor"; this.yayinla();
+    try {
+      await yerel.hizTesti();
+      this.hizTesti = "yok";
+    } catch {
+      this.hizTesti = "hata";
+    }
+    this.model = await yerel.modelDurumu().catch(() => this.model);
+    this.yayinla();
+  }
+
+  /** Öneriyi uygula: küçük modele geç (büyüğü silinir, 130 MB geri gelir) ya da başka moda geç. */
+  async modelSec(ad: "small" | "base") {
+    await yerel.modelSec({ model: ad, digeriniSil: ad === "base" }).catch(() => undefined);
+    await yerel.modelIndir({ model: ad }).catch(() => undefined);
+    await this.modelYukle();
   }
 
   async modelSil() {
@@ -753,7 +791,7 @@ class Hat {
   }
 
   async modelIndir() {
-    await yerel.modelIndir().catch(() => undefined);
+    await yerel.modelIndir({}).catch(() => undefined);
     await this.modelYukle();
   }
 
@@ -781,12 +819,39 @@ class Hat {
   /** İlk açılış sorusu ve Ayarlar'daki değiştirme. Mobil seçilince model hemen inmeye başlar. */
   modSec(mod: Mod) {
     this.ayarla({ mod });
-    if (mod === "mobil") void this.modelIndir();
+    // İşlemci desteklemiyorsa 190 MB boşuna inmez; Ayarlar bulut ya da bilgisayar önerir.
+    if (mod === "mobil") void yerel.modelDurumu().then((m) => (m.uyumlu === false ? this.modelYukle() : this.modelIndir())).catch(() => undefined);
+    if (mod === "bulut") { void this.modelYukle(); void this.bulutDene(); }
+  }
+
+  /** 0.15.0 [beta]: bulutun yazıya dökme ucu bu hesap için açık mı. */
+  bulutDurumu: "bagli" | "kapali" | "hesapsiz" | "bilinmiyor" = "bilinmiyor";
+  async bulutDene() {
+    if (!this.ayarlar.anahtar) { this.bulutDurumu = "hesapsiz"; this.yayinla(); return; }
+    try {
+      const r = await agIstek(`${this.ayarlar.sunucu}/v1/bulut/durum`, { headers: { Authorization: `Bearer ${this.ayarlar.anahtar}` } });
+      this.bulutDurumu = r.ok ? "bagli" : "kapali";
+    } catch {
+      this.bulutDurumu = "kapali";
+    }
+    this.yayinla();
   }
 
   private async mobilKayitBaslat() {
     this.model = await yerel.modelDurumu().catch(() => this.model);
-    if (!this.model?.hazir) {
+    // 0.15.0 bulut [beta]: parçalar bulutta metne döner; telefon modeli varsa bağlantı kopunca o devreye girer.
+    const bulut = this.bulut && !!this.ayarlar.anahtar;
+    if (this.bulut && !bulut && !this.model?.hazir) {
+      this.uyari = "Bulut için bir kez eşleştirme gerekir (Ayarlar → Bağlantılar). Ya da telefondaki modeli indir.";
+      this.yayinla();
+      return;
+    }
+    if (!bulut && this.model?.uyumlu === false) {
+      this.uyari = "Bu telefon konuşmayı kendi başına metne çeviremiyor. Ayarlar'dan Bulutla ya da Bilgisayarımla kullan.";
+      this.yayinla();
+      return;
+    }
+    if (!bulut && !this.model?.hazir) {
       this.uyari = this.model?.indiriliyor
         ? "Yazıya dökme modeli iniyor; bitince kayda başlayabilirsin."
         : "Önce telefondaki yazıya dökme modelini indir (Ayarlar → Telefonda yazıya dökme).";
@@ -796,7 +861,9 @@ class Hat {
     try {
       // Sunucu ve anahtar boş: servis bilgisayarı hiç denemez, her parça telefonda metne döner.
       // Yalnız hata ayıklama derlemesi testPcm'i okur (CanliKayitServisi BuildConfig.DEBUG); yayında yok sayılır.
-      await yerel.canliBaslat({ sunucu: "", anahtar: "", testPcm: localStorage.getItem("testPcm") ?? undefined });
+      await yerel.canliBaslat(bulut
+        ? { sunucu: this.ayarlar.sunucu, anahtar: this.ayarlar.anahtar, bulut: true, testPcm: localStorage.getItem("testPcm") ?? undefined }
+        : { sunucu: "", anahtar: "", testPcm: localStorage.getItem("testPcm") ?? undefined });
       const c = await yerel.canliDurumu();
       if (!c.calisiyor) throw new Error(c.hata ?? "bilinmeyen hata");
       this.kaydediyor = true;

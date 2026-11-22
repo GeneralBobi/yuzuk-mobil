@@ -237,6 +237,7 @@ public class YuzukEklentisi extends Plugin {
         Intent i = new Intent(getContext(), CanliKayitServisi.class)
                 .putExtra("sunucu", call.getString("sunucu"))
                 .putExtra("anahtar", call.getString("anahtar"))
+                .putExtra("bulut", Boolean.TRUE.equals(call.getBoolean("bulut", false)))
                 .putExtra("dil", call.getString("dil"))
                 .putExtra("testPcm", BuildConfig.DEBUG ? call.getString("testPcm") : null)
                 .putExtra("dokum", dokum.getAbsolutePath());
@@ -360,19 +361,50 @@ public class YuzukEklentisi extends Plugin {
 
     @PluginMethod
     public void modelDurumu(PluginCall call) {
+        Context c = getContext();
+        YerelWhisper.Model m = YerelWhisper.secili(c);
         JSObject r = new JSObject();
-        r.put("hazir", YerelWhisper.hazir(getContext()));
+        r.put("model", m.ad);
+        r.put("hazir", YerelWhisper.hazir(c));
+        r.put("uyumlu", YerelWhisper.uyumlu());
         r.put("indiriliyor", YerelWhisper.indiriliyor);
+        r.put("indirilenModel", YerelWhisper.indirilenModel);
         r.put("indirilen", YerelWhisper.indirilen);
-        r.put("boyut", YerelWhisper.BOYUT);
+        r.put("boyut", YerelWhisper.indiriliyor && YerelWhisper.indirilenModel != null ? YerelWhisper.model(YerelWhisper.indirilenModel).boyut : m.boyut);
         r.put("hata", YerelWhisper.indirmeHatasi);
+        JSObject boyutlar = new JSObject();
+        boyutlar.put("base", YerelWhisper.KUCUK.boyut);
+        boyutlar.put("small", YerelWhisper.BUYUK.boyut);
+        r.put("boyutlar", boyutlar);
+        org.json.JSONObject h = YerelWhisper.hiz(c);
+        if (h != null) try { r.put("hiz", JSObject.fromJSONObject(h)); } catch (Exception ignored) { }
         call.resolve(r);
     }
 
+    /** model: "small" | "base"; verilmezse seçili model iner. Verilen model seçili olur. */
     @PluginMethod
     public void modelIndir(PluginCall call) {
+        String ad = call.getString("model");
+        if (ad != null) YerelWhisper.sec(getContext(), ad);
         YerelWhisper.indir(getContext());
         call.resolve();
+    }
+
+    /** Modeli seçer; diğerini silmek isteğe bağlı (yer açmak için). */
+    @PluginMethod
+    public void modelSec(PluginCall call) {
+        YerelWhisper.sec(getContext(), call.getString("model", "small"));
+        if (Boolean.TRUE.equals(call.getBoolean("digeriniSil", false))) YerelWhisper.digeriniSil(getContext());
+        call.resolve();
+    }
+
+    /** 0.15.0: 10 sn'lik hız testi (arka planda; sonuç saklanır). */
+    @PluginMethod
+    public void hizTesti(PluginCall call) {
+        new Thread(() -> {
+            try { call.resolve(JSObject.fromJSONObject(YerelWhisper.hizTesti(getContext()))); }
+            catch (Exception e) { call.reject(e.getMessage() != null ? e.getMessage() : e.toString()); }
+        }, "yuzuk-hiz").start();
     }
 
     @PluginMethod

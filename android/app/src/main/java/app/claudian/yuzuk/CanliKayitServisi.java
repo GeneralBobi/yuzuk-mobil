@@ -53,7 +53,7 @@ public class CanliKayitServisi extends Service {
     static volatile String sonHata = null;
     static volatile String dokum = null;         // döküm dosyasının yolu
     static volatile int gonderilen = 0, yerelde = 0, bekleyen = 0, cumle = 0;
-    static volatile String sonDurum = null;      // "bilgisayar" | "telefon" | "bekliyor"
+    static volatile String sonDurum = null;      // "bilgisayar" | "bulut" | "telefon" | "bekliyor"
 
     private static final class Parca {
         final double bas;
@@ -65,6 +65,7 @@ public class CanliKayitServisi extends Service {
     private volatile boolean dur = false;
     private Thread kayitci, isci;
     private String sunucu, anahtar, dil;
+    private boolean bulut; // 0.15.0 [beta]: parça bilgisayara değil bulutun GPU'suna gider (/v1/bulut/parca)
     private String testPcm; // yalnız hata ayıklama derlemesi: mikrofon yerine 16 kHz PCM dosyası (emülatör testi)
     private OutputStream dokumYazici;
     private long ornekSayisi = 0L;
@@ -81,6 +82,7 @@ public class CanliKayitServisi extends Service {
         if (intent == null || calisiyor || isleniyor) return START_NOT_STICKY;
         sunucu = intent.getStringExtra("sunucu");
         anahtar = intent.getStringExtra("anahtar");
+        bulut = intent.getBooleanExtra("bulut", false);
         dil = intent.getStringExtra("dil");
         testPcm = BuildConfig.DEBUG ? intent.getStringExtra("testPcm") : null;
         String yol = intent.getStringExtra("dokum");
@@ -237,16 +239,16 @@ public class CanliKayitServisi extends Service {
         JSONArray cs = j.optJSONArray("cumleler");
         for (int i = 0; cs != null && i < cs.length(); i++) {
             JSONObject c = cs.getJSONObject(i);
-            if (yerel) { // telefonun zamanları parçanın başından; bilgisayar zaten oturum zamanını döndürür
+            if (yerel || bulut) { // telefonun ve bulutun zamanları parçanın başından; bilgisayar oturum zamanını döndürür
                 c.put("bas", Math.round((c.getDouble("bas") + p.bas) * 100) / 100.0);
                 c.put("son", Math.round((c.getDouble("son") + p.bas) * 100) / 100.0);
-                c.put("yerel", true);
+                c.put(yerel ? "yerel" : "bulut", true);
             }
             satir(c);
             cumle++;
         }
         if (yerel) yerelde++; else gonderilen++;
-        sonDurum = yerel ? "telefon" : "bilgisayar";
+        sonDurum = yerel ? "telefon" : bulut ? "bulut" : "bilgisayar";
         return true;
     }
 
@@ -254,7 +256,7 @@ public class CanliKayitServisi extends Service {
         if (sunucu == null || anahtar == null || anahtar.isEmpty()) return null;
         HttpURLConnection b = null;
         try {
-            String adres = sunucu + "/v1/parca?bas=" + String.format(java.util.Locale.ROOT, "%.2f", p.bas) + (dil != null ? "&dil=" + dil : "");
+            String adres = sunucu + (bulut ? "/v1/bulut/parca" : "/v1/parca") + "?bas=" + String.format(java.util.Locale.ROOT, "%.2f", p.bas) + (dil != null ? "&dil=" + dil : "");
             b = (HttpURLConnection) new URL(adres).openConnection();
             b.setConnectTimeout(6000);
             b.setReadTimeout(45000);

@@ -1,9 +1,11 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { App as CapApp } from "@capacitor/app";
-import { ArrowLeft, ArrowRight, Check, FileAudio, Laptop, Mic, NotebookPen, Settings, Smartphone, Square } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Cloud, FileAudio, Laptop, Mic, NotebookPen, Settings, Smartphone, Square } from "lucide-react";
 import { durak, hat, YAZICILAR, type Oturum } from "./hat";
 import { Halka } from "./Halka";
 import { Dogrudan } from "./Dogrudan";
+import { Baglantilar } from "./BaglantiEkrani";
+import { hizYorumu, MOD_ADI } from "./mod";
 import { yerel, type OkunanBildirim, type Paylasim } from "./yerel";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
@@ -100,6 +102,11 @@ function ModSecimi() {
           <Smartphone size={22} strokeWidth={1.6} />
           <strong>Yalnız telefonla</strong>
           <span>Konuşma telefonda metne döner, notu telefondaki Claude ya da ChatGPT'n yazar.</span>
+        </button>
+        <button className="mod-karti" onClick={() => hat.modSec("bulut")}>
+          <Cloud size={22} strokeWidth={1.6} />
+          <strong>Bulutla <span className="etiket">beta</span></strong>
+          <span>Telefonun yavaşsa: konuşma Claudian bulutunda metne döner, notu yine kendi Claude ya da ChatGPT'n yazar. Hesap gerekir.</span>
         </button>
       </div>
       <p className="dipnot">Sonra Ayarlar'dan değiştirebilirsin.</p>
@@ -487,19 +494,22 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
         <div className="satir">
           <div className="satir-bas">
             <h2>Notu kim yazar</h2>
-            <span className="etiket">{mobil ? "yalnız telefon" : "bilgisayar"}</span>
+            <span className="etiket">{MOD_ADI[a.mod ?? "pc"]}</span>
           </div>
-          <div className="secim iki" role="radiogroup" aria-label="Kullanım">
-            <button role="radio" aria-checked={!mobil} className="secenek" onClick={() => hat.modSec("pc")}>Bilgisayarımla</button>
-            <button role="radio" aria-checked={mobil} className="secenek" onClick={() => hat.modSec("mobil")}>Yalnız telefonla</button>
+          <div className="secim" role="radiogroup" aria-label="Kullanım">
+            <button role="radio" aria-checked={a.mod === "pc"} className="secenek" onClick={() => hat.modSec("pc")}>Bilgisayarımla</button>
+            <button role="radio" aria-checked={a.mod === "mobil"} className="secenek" onClick={() => hat.modSec("mobil")}>Yalnız telefonla</button>
+            <button role="radio" aria-checked={a.mod === "bulut"} className="secenek" onClick={() => hat.modSec("bulut")}>Bulutla<small>beta</small></button>
           </div>
         </div>
 
+        <Baglantilar />
+
         {mobil && <ModelSatiri />}
 
-        {!mobil && <div className="satir">
+        {(!mobil || hat.bulut) && <div className="satir">
           <div className="satir-bas">
-            <h2>Bağlantı</h2>
+            <h2>{hat.bulut ? "Hesap" : "Bağlantı"}</h2>
             <span className={`etiket ${b.durum === "bagli" ? "" : "soluk"}`}>
               {!eslesti ? "eşleşmedi" : b.etiket}
             </span>
@@ -523,10 +533,6 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
             </>
           )}
           {!a.anahtar && hat.googleTestAdresi && <button className="dugme" disabled={hat.eslestirme?.durum === "bekliyor"} onClick={() => void hat.googleGiris()}>Google ile devam et</button>}
-          {<div className="bulut-beta">
-            <button className="dugme" disabled aria-describedby="bulut-beta-bilgi">Bulut ile devam et <span className="etiket">beta</span></button>
-            <p id="bulut-beta-bilgi" className="aciklama">Yakında · Şimdilik kullanılamıyor.</p>
-          </div>}
           {hat.eslestirme && (
             <p className={hat.eslestirme.durum === "hata" ? "hata" : "aciklama"}>{hat.eslestirme.metin}</p>
           )}
@@ -670,29 +676,47 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
       </details>
 
       <p className="dipnot">
-        {mobil ? "Ses kaydedilmez; metin, not yazılınca silinir." : "Ses, not yazılınca silinir."}{" "}
+        {hat.bulut ? "Ses kaydedilmez. Bulutla: konuşma parçası metne çevrilmek için Claudian bulutuna gider, orada saklanmaz; metin, not yazılınca silinir."
+          : mobil ? "Ses kaydedilmez; metin, not yazılınca silinir." : "Ses, not yazılınca silinir."}{" "}
         <a href="https://claudian.app/yuzuk/gizlilik" target="_blank" rel="noopener noreferrer">Gizlilik politikası</a>
       </p>
     </section>
   );
 }
 
-/** Tam mobilde yazıya dökme modeli (whisper.cpp small, ~190 MB). Bir kez iner, SHA-256 ile doğrulanır. */
+/** Tam mobilde yazıya dökme modeli (whisper.cpp). 0.15.0: iki boy (small ≈190 MB, base ≈60 MB); model inince 10 sn'lik
+ *  hız testi çalışır. Telefon yavaşsa önce küçük model, o da yetmezse bilgisayar ya da bulut önerilir (Boran, 22.11). */
 function ModelSatiri() {
   const m = hat.model;
   useEffect(() => { void hat.modelYukle(); }, []);
   const mb = (b: number) => `${Math.round(b / 1e6)} MB`;
+  const ad = m?.model ?? "small";
+  const uyumsuz = m?.uyumlu === false;
+  const hiz = uyumsuz ? hizYorumu(99, ad, { uyumsuz: true })
+    : m?.hazir && m.hiz && m.hiz.model === ad ? hizYorumu(m.hiz.oran, ad, m.hiz) : null;
+  const bulut = hat.bulut;
   return (
     <div className="satir">
       <div className="satir-bas">
-        <h2>Telefonda yazıya dökme</h2>
-        <span className={`etiket ${m?.hazir ? "" : "soluk"}`}>{m?.hazir ? "hazır" : m?.indiriliyor ? "iniyor" : "inmedi"}</span>
+        <h2>{bulut ? "Telefon modeli (yedek)" : "Telefonda yazıya dökme"}</h2>
+        <span className={`etiket ${m?.hazir && !uyumsuz ? "" : "soluk"}`}>{uyumsuz ? "desteklenmiyor" : m?.hazir ? `hazır · ${ad}` : m?.indiriliyor ? "iniyor" : "inmedi"}</span>
       </div>
+      {bulut && <p className="aciklama">İsteğe bağlı. İnternet koparsa konuşma bu modelle telefonda metne döner.</p>}
       {m?.indiriliyor && <p className="deger mono">{mb(m.indirilen)} / {mb(m.boyut)}</p>}
-      {!m?.hazir && !m?.indiriliyor && <p className="aciklama">Bir kez, {m ? mb(m.boyut) : "190 MB"}. Wi-Fi'da indir.</p>}
+      {!m?.hazir && !m?.indiriliyor && !uyumsuz && <p className="aciklama">Bir kez, {m ? mb(m.boyut) : "190 MB"}. Wi-Fi'da indir.</p>}
+      {m?.hazir && hat.hizTesti === "calisiyor" && <p className="aciklama">Hız ölçülüyor (10 sn)…</p>}
+      {hiz && hat.hizTesti !== "calisiyor" && <p className={hiz.durum === "yavas" ? "hata" : "aciklama"}>{hiz.metin}</p>}
+      {hat.hizTesti === "hata" && <p className="hata">Hız ölçülemedi.</p>}
       {m?.hata && <p className="hata">{m.hata}</p>}
       <div className="satir-eylem">
-        {!m?.hazir && !m?.indiriliyor && <button className="dugme birincil" onClick={() => void hat.modelIndir()}>İndir</button>}
+        {!m?.hazir && !m?.indiriliyor && !uyumsuz && <button className="dugme birincil" onClick={() => void hat.modelIndir()}>İndir</button>}
+        {hiz?.oneri === "base" && !bulut && <button className="dugme birincil" onClick={() => void hat.modelSec("base")}>Küçük modele geç (60 MB)</button>}
+        {hiz?.oneri === "pc" && !bulut && <>
+          <button className="dugme birincil" onClick={() => hat.modSec("pc")}>Bilgisayarımla kullan</button>
+          <button className="dugme" onClick={() => hat.modSec("bulut")}>Bulutla dene · beta</button>
+        </>}
+        {m?.hazir && !uyumsuz && hat.hizTesti !== "calisiyor" && <button className="metin-dugme kor" onClick={() => void hat.hizOlc()}>Hızı yeniden ölç</button>}
+        {m?.hazir && ad === "base" && !m.indiriliyor && <button className="metin-dugme" onClick={() => void hat.modelSec("small")}>Büyük modele dön (190 MB)</button>}
         {m?.hazir && <button className="metin-dugme" onClick={() => void hat.modelSil()}>Modeli sil</button>}
       </div>
     </div>

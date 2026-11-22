@@ -15,11 +15,20 @@ export interface CanliDurum extends KayitDurumu {
   yerelde: number; // telefonda metne dönen parça (bağlantı yokken)
   bekleyen: number; // henüz metne dönmemiş parça (bellekte)
   cumle: number;
-  durum: "bilgisayar" | "telefon" | "bekliyor" | null;
+  durum: "bilgisayar" | "bulut" | "telefon" | "bekliyor" | null;
   dokum: string | null;
 }
 
-export interface ModelDurumu { hazir: boolean; indiriliyor: boolean; indirilen: number; boyut: number; hata: string | null }
+export interface ModelDurumu {
+  /** 0.15.0: seçili model — "small" (≈190 MB, doğru) ya da "base" (≈60 MB, yavaş telefon için). */
+  model: "small" | "base";
+  hazir: boolean; indiriliyor: boolean; indirilen: number; boyut: number; hata: string | null;
+  boyutlar?: { small: number; base: number };
+  /** Son hız testi: oran = 10 sn sesi çözme süresi / 10 sn. */
+  hiz?: { model: "small" | "base"; oran: number; sure_ms?: number; zaman?: number; uyumsuz?: boolean; cokme?: boolean };
+  /** İşlemci telefonda yazıya dökmeyi destekliyor mu (armv8.2 dotprod + fp16). Değilse model hiç çalıştırılmaz. */
+  uyumlu?: boolean;
+}
 
 export interface YuzukEklentisi {
   googleGiris(o: { clientId: string; nonce: string }): Promise<{ idToken: string }>;
@@ -31,12 +40,14 @@ export interface YuzukEklentisi {
   esitlemeIzi(): Promise<{ iz: Record<string, string>; varmi: boolean; gerek: boolean; zaman: number; metin: string }>;
   esitlemeIziYaz(o: { iz: Record<string, string>; tamam?: boolean; metin?: string }): Promise<void>;
   esitlemeKilit(o: { al: boolean }): Promise<{ alindi?: boolean }>;
-  canliBaslat(o: { sunucu: string; anahtar: string; dil?: string; testPcm?: string }): Promise<{ dokum: string }>;
+  canliBaslat(o: { sunucu: string; anahtar: string; bulut?: boolean; dil?: string; testPcm?: string }): Promise<{ dokum: string }>;
   canliDurdur(): Promise<{ dokum: string | null; sureSn: number }>;
   canliDurumu(): Promise<CanliDurum>;
   dokumOku(o: { yol: string }): Promise<{ dokum: string; bitti: boolean; cumle: number }>;
   modelDurumu(): Promise<ModelDurumu>;
-  modelIndir(): Promise<void>;
+  modelIndir(o: { model?: "small" | "base" }): Promise<void>;
+  modelSec(o: { model: "small" | "base"; digeriniSil?: boolean }): Promise<void>;
+  hizTesti(): Promise<{ model: string; oran: number; sure_ms: number }>;
   modelSil(): Promise<void>;
   kenarlariYenile(): Promise<void>;
   izinIste(): Promise<{ mikrofon: boolean }>;

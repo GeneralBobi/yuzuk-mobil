@@ -231,3 +231,27 @@ details.gelismis label { display: block; font: 500 11px/1 var(--poppins); color:
 .bildirim-sayfa h1 { margin-top: 6px; }
 .bildirim-sayfa .bildirim-metin { max-height: none; font: 400 16px/1.8 var(--lora); margin: 18px 0 28px; }
 .etiket-satir { font: 400 11px/1 var(--mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--soluk); margin: 0; }
+
+/* 0.15.0 Bağlantılar: Claudian masaüstündeki "AI bağlantıları" kartları */
+.bag-sekmeler { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
+.bag-sekme { min-height: 40px; padding: 8px 6px; border: 1px solid var(--cizgi); border-radius: 10px; background: transparent; color: var(--soluk); font: 500 12.5px/1.2 var(--poppins); }
+.bag-sekme[aria-selected="true"] { border-color: var(--kor); color: var(--yazi); background: var(--yuzey-2); }
+.bag-sekme small, .secenek small { display: block; font: 400 10px/1.2 var(--mono); color: var(--kor); margin-top: 2px; }
+.bag-kartlar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.bag-kart { display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 1px solid var(--cizgi); border-radius: 12px; background: var(--yuzey); min-width: 0; }
+.bag-kart-bas { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.bag-kart strong { font: 600 13px/1.3 var(--poppins); overflow-wrap: anywhere; }
+.bag-isaret { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 700 12px/1 var(--poppins); }
+.bag-isaret.hazir { background: #788c5d; color: var(--zemin); }
+.bag-isaret.bekliyor { border: 1px solid var(--cizgi-2); color: var(--soluk); }
+.bag-isaret.eksik { border: 1px solid var(--hata-cizgi); color: var(--kor); }
+.bag-satir { font: 500 12px/1.35 var(--mono); color: var(--yazi); }
+.bag-kart.hazir .bag-satir { color: #a3b88a; }
+.bag-kart.eksik .bag-satir { color: var(--kor); }
+.bag-kart.bekliyor .bag-satir { color: var(--soluk); }
+.bag-ipucu { font: 400 11.5px/1.5 var(--lora); color: var(--soluk); }
+.bag-adres { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--cizgi); }
+.bag-adres .deger { word-break: break-all; margin: 6px 0 2px; font-size: 12px; }
+@media (max-width: 340px) { .bag-kartlar { grid-template-columns: 1fr; } }
+
+.mod-karti strong .etiket { font: 500 11px/1 var(--mono); color: var(--kor); margin-left: 6px; vertical-align: 2px; }
