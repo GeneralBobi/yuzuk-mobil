@@ -255,3 +255,12 @@ details.gelismis label { display: block; font: 500 11px/1 var(--poppins); color:
 @media (max-width: 340px) { .bag-kartlar { grid-template-columns: 1fr; } }
 
 .mod-karti strong .etiket { font: 500 11px/1 var(--mono); color: var(--kor); margin-left: 6px; vertical-align: 2px; }
+.bag-durum { font: 600 13px/1.35 var(--poppins); }
+.bag-durum.hazir { color: #8fb26a; }
+.bag-durum.eksik { color: var(--kor); }
+.bag-durum.bekliyor { color: var(--soluk); }
+.bag-satir.soluk-mono { color: var(--yazi); }
+.bag-kart.eksik .bag-satir.soluk-mono { color: var(--soluk); }
+.bag-eylem { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 8px; }
+.bag-eylem .metin-dugme { padding: 6px 0; }
+.dugme.kucuk { min-height: 36px; padding: 6px 14px; font-size: 13px; }

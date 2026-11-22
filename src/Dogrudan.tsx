@@ -3,7 +3,22 @@
 // İşi Android tarafı yapar (HafizaServisi, DogrudanCihaz); bu ekran yalnız açar, kapatır ve durumu gösterir.
 import { useEffect, useState } from "react";
 import { hat } from "./hat";
+import { Check } from "lucide-react";
 import { yerel, type DogrudanDurum } from "./yerel";
+
+/** Ham hata ("relay 500") kullanıcıya teknik kod olarak gösterilmez. Servis kendisi yeniden dener. */
+export function hataMetni(h: string): string {
+  const m = /^relay (\d{3})$/.exec(h.trim());
+  if (m) {
+    const k = Number(m[1]);
+    if (k === 401) return "Bağlantı anahtarı reddedildi. Kapatıp yeniden aç.";
+    if (k === 429) return "Bağlantı yoğun; birazdan yeniden denenecek.";
+    if (k >= 500) return "Claudian bağlantı sunucusuna şu an ulaşılamıyor; telefon kendisi yeniden deniyor.";
+    return `Bağlantı kurulamadı (${k}); yeniden deneniyor.`;
+  }
+  if (/Unable to resolve host|UnknownHost|timeout|timed out|failed to connect/i.test(h)) return "İnternet yok ya da zayıf; bağlanınca kendiliğinden devam eder.";
+  return h;
+}
 
 const AI_ADI: Record<string, string> = { claude: "Claude", chatgpt: "ChatGPT" };
 const BAGLAYICI_SAYFASI: Record<string, string> = {
@@ -52,7 +67,7 @@ export function Dogrudan() {
         <h2>AI'lara doğrudan bağlan</h2>
         <span className={`etiket ${acik && d?.baglanti === "cevrimici" ? "" : "soluk"}`}>{etiket}</span>
       </div>
-      <p className="aciklama">Bilgisayar gerekmez. Claude ve ChatGPT bu telefondaki Obsidian klasörüne bağlanır.</p>
+      <p className="aciklama">Bilgisayar gerekmez. Claude ve ChatGPT bu telefondaki Obsidian klasörüne bağlanır. Adres üç modda da aynıdır.</p>
       {!vault ? (
         <p className="aciklama">Önce yukarıdan Obsidian klasörünü seç.</p>
       ) : !acik ? (
@@ -61,15 +76,30 @@ export function Dogrudan() {
         </div>
       ) : (
         <>
-          {(["claude", "chatgpt"] as const).map((ai) => d?.adresler[ai] && (
-            <div key={ai} style={{ marginTop: 10 }}>
-              <p className="deger mono" style={{ wordBreak: "break-all" }}>{AI_ADI[ai]} · {d.adresler[ai]}</p>
-              <div className="satir-eylem">
-                <button className="dugme" onClick={() => void bagla(ai)}>{AI_ADI[ai]}'a bağla</button>
-                <button className="metin-dugme kor" onClick={() => void kopyala(ai, d.adresler[ai]!)}>{kopyalandi === ai ? "Kopyalandı" : "Adresi kopyala"}</button>
-              </div>
-            </div>
-          ))}
+          {/* 0.15.0 (Boran, 22.11): Claudian masaüstündeki "AI bağlantıları" gibi: her AI bir kart, durum tek bakışta. */}
+          <div className="bag-kartlar">
+            {(["claude", "chatgpt"] as const).map((ai) => {
+              const izin = d?.izinler.find((g) => g.ai === ai);
+              const cevrimici = d?.baglanti === "cevrimici";
+              const durum = !izin ? "eksik" : cevrimici ? "hazir" : "bekliyor";
+              return (
+                <div key={ai} className={`bag-kart ${durum}`}>
+                  <div className="bag-kart-bas">
+                    <strong>{AI_ADI[ai]}</strong>
+                    <span className={`bag-isaret ${durum}`}>{durum === "hazir" ? <Check size={14} strokeWidth={2.4} /> : "!"}</span>
+                  </div>
+                  <span className="bag-satir soluk-mono">{izin ? "Seçili · Bağlı" : "Bağlı değil"}</span>
+                  <span className={`bag-durum ${durum}`}>{!izin ? "Kurulum tamamlanmadı" : cevrimici ? "Kullanıma hazır" : "Telefon bağlanıyor"}</span>
+                  {izin && <span className="bag-ipucu">{izin.kapsam.includes("write") ? "Okur ve yazar" : "Yalnız okur"}</span>}
+                  <div className="bag-eylem">
+                    {!izin && d?.adresler[ai] && <button className="dugme kucuk" onClick={() => void bagla(ai)}>Bağla</button>}
+                    {d?.adresler[ai] && <button className="metin-dugme kor" onClick={() => void kopyala(ai, d.adresler[ai]!)}>{kopyalandi === ai ? "Kopyalandı" : "Adresi kopyala"}</button>}
+                    {izin && <button className="metin-dugme" onClick={() => void yap(() => yerel.dogrudanIzinKaldir({ id: izin.id }))}>Kaldır</button>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           {d && d.pencere > 0 && (
             <p className="aciklama">Adres kopyalandı. {AI_ADI[kopyalandi ?? "claude"] ?? "AI"} ayarlarında "Özel bağlayıcı ekle"ye yapıştır; {Math.ceil(d.pencere / 60000)} dk içinde onay sormadan bağlanır.</p>
           )}
@@ -82,23 +112,13 @@ export function Dogrudan() {
               </div>
             </div>
           ))}
-          {!!d?.izinler.length && (
-            <div style={{ marginTop: 10 }}>
-              {d.izinler.map((g) => (
-                <div className="cihaz" key={g.id}>
-                  <span><b>{g.ad || AI_ADI[g.ai]}</b> · {g.kapsam.includes("write") ? "okur, yazar" : "yalnız okur"}</span>
-                  <button className="metin-dugme" style={{ padding: "0 0 0 16px" }} onClick={() => void yap(() => yerel.dogrudanIzinKaldir({ id: g.id }))}>Kaldır</button>
-                </div>
-              ))}
-            </div>
-          )}
+          {d?.hata && d.baglanti !== "cevrimici" && <p className="aciklama">{hataMetni(d.hata)}</p>}
           <div className="satir-eylem">
             <button className="metin-dugme kor" onClick={() => void yap(() => yerel.dogrudanAyarla({ yazma: !d?.yazma }))}>
               {d?.yazma ? "Yazmayı kapat" : "Yazmaya izin ver"}
             </button>
             <button className="metin-dugme" onClick={() => void yap(() => yerel.dogrudanAyarla({ acik: false }))}>Kapat</button>
           </div>
-          {d?.hata && d.baglanti !== "cevrimici" && <p className="aciklama">{d.hata}</p>}
         </>
       )}
       {hata && <p className="hata">{hata}</p>}
