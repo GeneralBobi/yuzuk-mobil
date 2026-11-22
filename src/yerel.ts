@@ -19,13 +19,16 @@ export interface CanliDurum extends KayitDurumu {
   dokum: string | null;
 }
 
+/** base ≈60 MB (yavaş telefon) · small ≈190 MB · turbo ≈574 MB (large-v3-turbo, güçlü telefon). */
+export type ModelAdi = "base" | "small" | "turbo";
+
 export interface ModelDurumu {
   /** 0.15.0: seçili model — "small" (≈190 MB, doğru) ya da "base" (≈60 MB, yavaş telefon için). */
-  model: "small" | "base";
+  model: ModelAdi;
   hazir: boolean; indiriliyor: boolean; indirilen: number; boyut: number; hata: string | null;
-  boyutlar?: { small: number; base: number };
+  boyutlar?: { small: number; base: number; turbo?: number };
   /** Son hız testi: oran = 10 sn sesi çözme süresi / 10 sn. */
-  hiz?: { model: "small" | "base"; oran: number; sure_ms?: number; zaman?: number; uyumsuz?: boolean; cokme?: boolean };
+  hiz?: { model: ModelAdi; oran: number; sure_ms?: number; zaman?: number; uyumsuz?: boolean; cokme?: boolean };
   /** İşlemci telefonda yazıya dökmeyi destekliyor mu (armv8.2 dotprod + fp16). Değilse model hiç çalıştırılmaz. */
   uyumlu?: boolean;
 }
@@ -45,8 +48,8 @@ export interface YuzukEklentisi {
   canliDurumu(): Promise<CanliDurum>;
   dokumOku(o: { yol: string }): Promise<{ dokum: string; bitti: boolean; cumle: number }>;
   modelDurumu(): Promise<ModelDurumu>;
-  modelIndir(o: { model?: "small" | "base" }): Promise<void>;
-  modelSec(o: { model: "small" | "base"; digeriniSil?: boolean }): Promise<void>;
+  modelIndir(o: { model?: ModelAdi }): Promise<void>;
+  modelSec(o: { model: ModelAdi; digeriniSil?: boolean }): Promise<void>;
   hizTesti(): Promise<{ model: string; oran: number; sure_ms: number }>;
   modelSil(): Promise<void>;
   kenarlariYenile(): Promise<void>;

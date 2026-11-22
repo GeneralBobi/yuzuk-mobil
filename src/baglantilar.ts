@@ -21,7 +21,7 @@ export interface BaglantiOzeti {
 }
 
 const AI: Record<string, string> = { claude: "Claude", codex: "ChatGPT", gemini: "Antigravity", chatgpt: "ChatGPT" };
-const MODEL_ADI: Record<string, string> = { small: "small · 190 MB", base: "base · 60 MB" };
+const MODEL_ADI: Record<string, string> = { small: "small · 190 MB", base: "base · 60 MB", turbo: "large-v3-turbo · 574 MB" };
 
 function vaultKarti(o: BaglantiOzeti, yer: string): Kart {
   return o.vault ? { ad: "Obsidian vault", durum: "hazir", satir: `Seçili · ${yer}`, ipucu: o.vault }

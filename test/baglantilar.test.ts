@@ -60,3 +60,11 @@ test("0.15.0: desteklemeyen işlemcide model kartı bunu söyler", () => {
   const model = { hazir: true, indiriliyor: false, ad: "small", uyumsuz: true };
   assert.equal(baglantiKartlari("mobil", { ...taban, model })[0].satir, "Bu telefonda çalışmaz");
 });
+
+test("0.15.0: small'ı çok hızlı çeviren telefona large-v3-turbo önerilir; turbo ağırsa small'a dönülür", () => {
+  assert.equal(hizYorumu(0.12, "small").oneri, "turbo");
+  assert.equal(hizYorumu(0.35, "small").oneri, null);
+  assert.equal(hizYorumu(0.4, "turbo").oneri, null);
+  assert.equal(hizYorumu(1.4, "turbo").oneri, "small");
+  assert.equal(hizYorumu(99, "turbo", { cokme: true }).oneri, "small");
+});

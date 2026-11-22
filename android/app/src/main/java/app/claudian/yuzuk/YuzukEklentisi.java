@@ -375,6 +375,7 @@ public class YuzukEklentisi extends Plugin {
         JSObject boyutlar = new JSObject();
         boyutlar.put("base", YerelWhisper.KUCUK.boyut);
         boyutlar.put("small", YerelWhisper.BUYUK.boyut);
+        boyutlar.put("turbo", YerelWhisper.TURBO.boyut);
         r.put("boyutlar", boyutlar);
         org.json.JSONObject h = YerelWhisper.hiz(c);
         if (h != null) try { r.put("hiz", JSObject.fromJSONObject(h)); } catch (Exception ignored) { }

@@ -9,7 +9,7 @@
 // Ses telefonda not Obsidian'a yazılana kadar durur; sunucu hata verirse yeniden gönderilebilir.
 // Not yazılınca hem telefondaki ses hem sunucudaki sonuç silinir.
 
-import { yerel, type CanliDurum, type ModelDurumu, type Paylasim } from "./yerel";
+import { yerel, type CanliDurum, type ModelAdi, type ModelDurumu, type Paylasim } from "./yerel";
 import protokol from "./vault/protokol.md?raw";
 import { version as SURUM } from "../package.json";
 import { agIstek } from "./ag";
@@ -778,8 +778,9 @@ class Hat {
   }
 
   /** Öneriyi uygula: küçük modele geç (büyüğü silinir, 130 MB geri gelir) ya da başka moda geç. */
-  async modelSec(ad: "small" | "base") {
-    await yerel.modelSec({ model: ad, digeriniSil: ad === "base" }).catch(() => undefined);
+  async modelSec(ad: ModelAdi) {
+    // Telefonda tek model tutulur: yenisi seçilince ötekiler silinir (turbo 574 MB yer kaplar).
+    await yerel.modelSec({ model: ad, digeriniSil: true }).catch(() => undefined);
     await yerel.modelIndir({ model: ad }).catch(() => undefined);
     await this.modelYukle();
   }

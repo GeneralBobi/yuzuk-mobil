@@ -38,17 +38,21 @@ export function surumEski(a: string | null, b: string | null): boolean {
 /** 0.15.0 hız testi yorumu. oran = 10 sn sesi çözme süresi / 10 sn. 1'in üstünde telefon konuşmanın gerisinde kalır;
  *  kayıt bitince parçalar yine metne döner ama not geç hazırlanır. Sıra (Boran, 22.11): yavaşsa önce küçük model,
  *  o da yetmezse bilgisayar ya da bulut. */
-export type HizOnerisi = { durum: "hizli" | "yeterli" | "yavas"; oneri: "base" | "pc" | null; metin: string };
-export const HIZ_ESIK = { hizli: 0.5, yeterli: 1.0 } as const;
+export type HizOnerisi = { durum: "hizli" | "yeterli" | "yavas"; oneri: "base" | "small" | "turbo" | "pc" | null; metin: string };
+export const HIZ_ESIK = { turbo: 0.2, hizli: 0.5, yeterli: 1.0 } as const;
 
-export function hizYorumu(oran: number, model: "small" | "base", ek: { uyumsuz?: boolean; cokme?: boolean } = {}): HizOnerisi {
+export function hizYorumu(oran: number, model: "small" | "base" | "turbo", ek: { uyumsuz?: boolean; cokme?: boolean } = {}): HizOnerisi {
   if (ek.uyumsuz) return { durum: "yavas", oneri: "pc", metin: "Bu telefonun işlemcisi konuşmayı telefonda metne çeviremiyor. Bulutla ya da bilgisayarla kullan." };
+  if (ek.cokme && model === "turbo") return { durum: "yavas", oneri: "small", metin: "Hız testi yarıda kaldı; büyük model telefona ağır geldi. 190 MB'lık modele dönmek önerilir." };
   if (ek.cokme && model === "small") return { durum: "yavas", oneri: "base", metin: "Hız testi yarıda kaldı; bu model telefona ağır geldi. Daha küçük model (60 MB) önerilir." };
   if (ek.cokme) return { durum: "yavas", oneri: "pc", metin: "Küçük model de telefonda çalışamadı. Bulutla ya da bilgisayarla kullan." };
   const kat = oran > 0 ? Math.round((1 / oran) * 10) / 10 : 0;
+  // 0.15.0: small'ı çok hızlı çeviren telefon (ör. Snapdragon 8 Elite) daha doğru large-v3-turbo'yu kaldırır.
+  if (model === "small" && oran <= HIZ_ESIK.turbo) return { durum: "hizli", oneri: "turbo", metin: `Telefonun çok hızlı (${kat}×). Daha doğru büyük model (large-v3-turbo, 574 MB) önerilir; Türkçede belirgin fark eder.` };
   if (oran <= HIZ_ESIK.hizli) return { durum: "hizli", oneri: null, metin: `Telefonun hızlı: konuşmayı ${kat}× hızla metne çeviriyor.` };
   if (oran <= HIZ_ESIK.yeterli) return { durum: "yeterli", oneri: null, metin: "Telefonun yetiyor: konuşmaya yetişiyor." };
   const geri = `10 saniyelik konuşmayı ${Math.round(oran * 10)} saniyede çeviriyor; uzun kayıtta not geç hazırlanır.`;
+  if (model === "turbo") return { durum: "yavas", oneri: "small", metin: `${geri} Büyük model bu telefona ağır; 190 MB'lık modele dönmek önerilir.` };
   if (model === "small") return { durum: "yavas", oneri: "base", metin: `${geri} Daha küçük model (60 MB) önerilir.` };
   return { durum: "yavas", oneri: "pc", metin: `${geri} Küçük model de yetmiyor; bilgisayarla ya da bulutla kullanmak önerilir.` };
 }

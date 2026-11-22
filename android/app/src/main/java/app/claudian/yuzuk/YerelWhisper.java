@@ -25,6 +25,8 @@ public final class YerelWhisper {
     }
     static final Model KUCUK = new Model("base", "ggml-base-q5_1.bin", "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898", 59707625L);
     static final Model BUYUK = new Model("small", "ggml-small-q5_1.bin", "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb", 190085487L);
+    /** 0.15.0 (Boran, 22.11): güçlü telefonlar için large-v3-turbo (q5_0, ≈574 MB). Türkçede small'dan belirgin biçimde iyi. */
+    static final Model TURBO = new Model("turbo", "ggml-large-v3-turbo-q5_0.bin", "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2", 574041195L);
 
     static volatile long indirilen = 0L;
     static volatile boolean indiriliyor = false;
@@ -65,7 +67,7 @@ public final class YerelWhisper {
         return uyumluMu;
     }
 
-    static Model model(String ad) { return "base".equals(ad) ? KUCUK : BUYUK; }
+    static Model model(String ad) { return "base".equals(ad) ? KUCUK : "turbo".equals(ad) ? TURBO : BUYUK; }
 
     /** Seçili model (varsayılan small; 0.14.0 kurulumları small indirmişti). */
     static Model secili(Context c) { return model(depo(c).getString("secili", "small")); }
@@ -196,13 +198,14 @@ public final class YerelWhisper {
         }
         dosya(c, KUCUK).delete();
         dosya(c, BUYUK).delete();
+        dosya(c, TURBO).delete();
         depo(c).edit().remove("hiz").apply();
     }
 
     /** Seçili olmayan modeli siler (küçük modele geçince 190 MB geri gelir). */
     static void digeriniSil(Context c) {
         Model m = secili(c);
-        dosya(c, m == KUCUK ? BUYUK : KUCUK).delete();
+        for (Model x : new Model[]{KUCUK, BUYUK, TURBO}) if (x != m) dosya(c, x).delete();
     }
 
     /** Test ve teşhis için: dosyanın SHA-256'sı. */

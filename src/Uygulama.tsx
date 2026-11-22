@@ -702,6 +702,16 @@ function ModelSatiri() {
         <span className={`etiket ${m?.hazir && !uyumsuz ? "" : "soluk"}`}>{uyumsuz ? "desteklenmiyor" : m?.hazir ? `hazır · ${ad}` : m?.indiriliyor ? "iniyor" : "inmedi"}</span>
       </div>
       {bulut && <p className="aciklama">İsteğe bağlı. İnternet koparsa konuşma bu modelle telefonda metne döner.</p>}
+      {!uyumsuz && (
+        <div className="secim" role="radiogroup" aria-label="Model">
+          {(["base", "small", "turbo"] as const).map((x) => (
+            <button key={x} role="radio" aria-checked={ad === x} className="secenek" disabled={m?.indiriliyor}
+              onClick={() => { if (x !== ad) void hat.modelSec(x); }}>
+              {x === "turbo" ? "Büyük" : x === "small" ? "Orta" : "Küçük"}<small>{x === "turbo" ? "574 MB" : x === "small" ? "190 MB" : "60 MB"}</small>
+            </button>
+          ))}
+        </div>
+      )}
       {m?.indiriliyor && <p className="deger mono">{mb(m.indirilen)} / {mb(m.boyut)}</p>}
       {!m?.hazir && !m?.indiriliyor && !uyumsuz && <p className="aciklama">Bir kez, {m ? mb(m.boyut) : "190 MB"}. Wi-Fi'da indir.</p>}
       {m?.hazir && hat.hizTesti === "calisiyor" && <p className="aciklama">Hız ölçülüyor (10 sn)…</p>}
@@ -711,12 +721,13 @@ function ModelSatiri() {
       <div className="satir-eylem">
         {!m?.hazir && !m?.indiriliyor && !uyumsuz && <button className="dugme birincil" onClick={() => void hat.modelIndir()}>İndir</button>}
         {hiz?.oneri === "base" && !bulut && <button className="dugme birincil" onClick={() => void hat.modelSec("base")}>Küçük modele geç (60 MB)</button>}
+        {hiz?.oneri === "turbo" && <button className="dugme birincil" onClick={() => void hat.modelSec("turbo")}>Büyük modele geç (574 MB)</button>}
+        {hiz?.oneri === "small" && <button className="dugme birincil" onClick={() => void hat.modelSec("small")}>190 MB'lık modele dön</button>}
         {hiz?.oneri === "pc" && !bulut && <>
           <button className="dugme birincil" onClick={() => hat.modSec("pc")}>Bilgisayarımla kullan</button>
           <button className="dugme" onClick={() => hat.modSec("bulut")}>Bulutla dene · beta</button>
         </>}
         {m?.hazir && !uyumsuz && hat.hizTesti !== "calisiyor" && <button className="metin-dugme kor" onClick={() => void hat.hizOlc()}>Hızı yeniden ölç</button>}
-        {m?.hazir && ad === "base" && !m.indiriliyor && <button className="metin-dugme" onClick={() => void hat.modelSec("small")}>Büyük modele dön (190 MB)</button>}
         {m?.hazir && <button className="metin-dugme" onClick={() => void hat.modelSil()}>Modeli sil</button>}
       </div>
     </div>
