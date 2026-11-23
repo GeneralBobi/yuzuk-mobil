@@ -43,9 +43,31 @@ public final class YerelWhisper {
         return f.exists() && f.length() == BOYUT;
     }
 
-    /** Parçayı metne çevirir. Model yoksa ya da yüklenemezse null: çağıran parçayı bekletir. */
+    private static Boolean uyumluMu = null;
+
+    /** 0.15.4 (0.15.0'dan): kütüphane armv8.2-a+fp16+dotprod için derlenir. Bu komutları bilmeyen işlemcide (eski ARMv8.0
+     *  çekirdekler) model yüklenince uygulama SIGILL ile kapanır; bu catch ile yakalanamaz. Önce /proc/cpuinfo'ya bakılır;
+     *  destek yoksa yerel model hiç çalıştırılmaz, parça bilgisayarı bekler. */
+    static synchronized boolean uyumlu() {
+        if (uyumluMu != null) return uyumluMu;
+        boolean dp = false, hp = false;
+        try (java.io.BufferedReader b = new java.io.BufferedReader(new java.io.FileReader("/proc/cpuinfo"))) {
+            String satir;
+            while ((satir = b.readLine()) != null) {
+                if (!satir.startsWith("Features")) continue;
+                java.util.List<String> f = java.util.Arrays.asList(satir.substring(satir.indexOf(':') + 1).trim().split(" +"));
+                dp = f.contains("asimddp");
+                hp = f.contains("fphp") && f.contains("asimdhp");
+                break;
+            }
+        } catch (Exception ignored) { }
+        uyumluMu = dp && hp;
+        return uyumluMu;
+    }
+
+    /** Parçayı metne çevirir. Model yoksa, işlemci desteklemiyorsa ya da yüklenemezse null: çağıran parçayı bekletir. */
     static synchronized String metin(Context c, float[] ornekler, String dil) {
-        if (!hazir(c)) return null;
+        if (!hazir(c) || !uyumlu()) return null;
         try {
             if (!kutuphane) {
                 System.loadLibrary("yuzukwhisper");

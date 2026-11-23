@@ -104,6 +104,7 @@ public class KayitServisi extends Service {
             kilit.setReferenceCounted(false);
             kilit.acquire(6 * 60 * 60 * 1000L); // en uzun kayıt süresi; kayıt durunca hemen bırakılır
             nobetci.postDelayed(this::nobet, NOBET_MS);
+            KayitHatirlatici.baslat(this, baslangicMs); // 0.15.4: kayıt açık unutulmasın, saat başı uyarı
         } catch (Exception e) {
             sonHata = e.getMessage() != null ? e.getMessage() : e.toString();
             calisiyor = false;
@@ -177,6 +178,7 @@ public class KayitServisi extends Service {
     public void onDestroy() {
         bitiyor = true;
         nobetci.removeCallbacksAndMessages(null);
+        KayitHatirlatici.dur(this);
         MediaRecorder r = kaydedici;
         kaydedici = null;
         if (r != null) {

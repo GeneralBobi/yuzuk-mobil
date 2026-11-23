@@ -759,7 +759,7 @@ public class YuzukEklentisi extends Plugin {
     private JSObject bekleyenBildirim = null;
 
     private void bildirimIsle(Intent intent) {
-        JSObject r = BildirimOku.oku(intent);
+        JSObject r = BildirimOku.oku(getContext(), intent);
         if (r == null) return;
         bekleyenBildirim = r;
         notifyListeners("bildirim", r, true);

@@ -101,6 +101,7 @@ public class CanliKayitServisi extends Service {
             isci = new Thread(this::isle, "yuzuk-parca");
             kayitci.start();
             isci.start();
+            KayitHatirlatici.baslat(this, baslangicMs); // 0.15.4: kayıt açık unutulmasın, saat başı uyarı
         } catch (Exception e) {
             sonHata = e.getMessage() != null ? e.getMessage() : e.toString();
             calisiyor = false;
@@ -186,6 +187,7 @@ public class CanliKayitServisi extends Service {
             }
             if (test != null) try { test.close(); } catch (Exception ignored) { }
             seviye = 0f;
+            KayitHatirlatici.dur(this);
             isleniyor = true;  // mikrofon kapandı; kalan parçalar metne dönene kadar servis sürer
             calisiyor = false;
             kuyruk.offer(new Parca(-1, null)); // son işareti

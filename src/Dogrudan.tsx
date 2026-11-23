@@ -5,6 +5,20 @@ import { useEffect, useState } from "react";
 import { hat } from "./hat";
 import { yerel, type DogrudanDurum } from "./yerel";
 
+/** 0.15.4 (0.15.0'dan): ham hata ("relay 500") kullanıcıya teknik kod olarak gösterilmez. Servis kendisi yeniden dener. */
+export function hataMetni(h: string): string {
+  const m = /^relay (\d{3})$/.exec(h.trim());
+  if (m) {
+    const k = Number(m[1]);
+    if (k === 401) return "Bağlantı anahtarı reddedildi. Kapatıp yeniden aç.";
+    if (k === 429) return "Bağlantı yoğun; birazdan yeniden denenecek.";
+    if (k >= 500) return "Claudian bağlantı sunucusuna şu an ulaşılamıyor; telefon kendisi yeniden deniyor.";
+    return `Bağlantı kurulamadı (${k}); yeniden deneniyor.`;
+  }
+  if (/Unable to resolve host|UnknownHost|timeout|timed out|failed to connect/i.test(h)) return "İnternet yok ya da zayıf; bağlanınca kendiliğinden devam eder.";
+  return h;
+}
+
 const AI_ADI: Record<string, string> = { claude: "Claude", chatgpt: "ChatGPT" };
 const BAGLAYICI_SAYFASI: Record<string, string> = {
   claude: "https://claude.ai/settings/connectors",
@@ -98,7 +112,7 @@ export function Dogrudan() {
             </button>
             <button className="metin-dugme" onClick={() => void yap(() => yerel.dogrudanAyarla({ acik: false }))}>Kapat</button>
           </div>
-          {d?.hata && d.baglanti !== "cevrimici" && <p className="aciklama">{d.hata}</p>}
+          {d?.hata && d.baglanti !== "cevrimici" && <p className="aciklama">{hataMetni(d.hata)}</p>}
         </>
       )}
       {hata && <p className="hata">{hata}</p>}
