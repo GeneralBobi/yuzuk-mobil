@@ -13,6 +13,7 @@ import { yerel, type CanliDurum, type ModelDurumu, type Paylasim } from "./yerel
 import protokol from "./vault/protokol.md?raw";
 import { version as SURUM } from "../package.json";
 import { agIstek } from "./ag";
+import { protokolSurumu, surumEski } from "./protokol";
 import { BAKILIYOR, INTERNET_YOK, eslesmeMetni, saglikSonucu, type Baglanti } from "./baglanti";
 
 type NotGirdisi = { baslik?: string; not_md?: string; hatirlaticilar?: { tarih: string; saat?: string; metin: string }[] };
@@ -378,10 +379,22 @@ class Hat {
   }
 
   /** Telefondaki vault'un iskeleti yalnız protokoldür: başlık nasıl açılır, ne nasıl yazılır. Bölümler bilgi geldikçe
-   *  oluşur; boş şablon not açılmaz. Dosya zaten varsa (masaüstü kurmuş ya da kullanıcı değiştirmiş) dokunulmaz. */
+   *  oluşur; boş şablon not açılmaz. */
   async iskeletKur() {
     if (!this.ayarlar.vault) return;
-    await yerel.dosyaYaz({ agac: this.ayarlar.vault, yol: "Vault Protokolü.md", icerik: protokol, ekle: false, yoksa: true })
+    const agac = this.ayarlar.vault;
+    // 0.15.5 (0.14.0'dan): telefon yalnız dosya yoksa yazıyordu; ilk kurulumdaki eski protokol (0.27.0) bilgisayarsız
+    // kullanıcıda hiç güncellenmiyordu. Telefondaki dosya daha eski bir sürümse güncellenir; sürümü okunamayan ya da
+    // daha yeni olan (bilgisayardan eşitlenen) dosyaya dokunulmaz.
+    const mevcut = await yerel.vaultOku({ agac, yol: "Vault Protokolü.md" }).then((r) => r.icerik).catch(() => null);
+    if (mevcut !== null && !surumEski(protokolSurumu(mevcut), protokolSurumu(protokol))) return;
+    if (mevcut !== null) {
+      // Eski dosyada kullanıcının kendi eklemesi olabilir: üzerine yazmadan önce masaüstünün kuralıyla aynı adla
+      // ("(yours tarih)") bir kopya bırakılır. Masaüstü Claudian, kopya kendi ürettiği metinse onu toplar; değilse korur.
+      const gun = new Date().toLocaleDateString("sv-SE");
+      await yerel.dosyaYaz({ agac, yol: `Vault Protokolü (yours ${gun}).md`, icerik: mevcut, ekle: false, yoksa: true }).catch(() => undefined);
+    }
+    await yerel.dosyaYaz({ agac, yol: "Vault Protokolü.md", icerik: protokol, ekle: false, yoksa: mevcut === null })
       .catch(() => undefined);
   }
 

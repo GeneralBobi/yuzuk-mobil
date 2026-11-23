@@ -214,3 +214,8 @@ details.gelismis label { display: block; font: 500 11px/1 var(--poppins); color:
 /* 0.12.0: dokunulan bildirimin tam metni. Uzun metin kutunun içinde kayar, başlık ve Kapat yerinde kalır. */
 .bildirim-metin { margin: 12px 0 18px; max-height: 58vh; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere;
   font: 400 16px/1.6 var(--poppins); color: var(--yazi); }
+
+/* 0.15.5 (0.12.0'dan): rıza satırları — paragraf değil, tek satır onay */
+.riza { display: grid; gap: 12px; justify-items: center; text-align: center; margin-top: 16px; }
+.onay { display: flex; gap: 10px; align-items: flex-start; font: 400 14px/1.6 var(--lora); color: var(--yazi); cursor: pointer; max-width: 62ch; }
+.onay input { accent-color: var(--kor); width: 18px; height: 18px; margin-top: 3px; flex: none; }

@@ -222,6 +222,7 @@ function useSaniye(acik: boolean) {
 
 function Dinle({ git }: { git: (s: Sekme) => void }) {
   useSaniye(hat.kaydediyor);
+  const [rizaSor, setRizaSor] = useState(false);
   const son = hat.oturumlar[0];
   const bugun = new Date().toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" });
   const eksik = !hat.ayarlar.anahtar ? "Eşleştir · klasör seç" : "Klasör seç";
@@ -251,6 +252,8 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
       <div className="halka-alani">
         <Halka kayitta={hat.kaydediyor} seviye={hat.seviye} okuma={hat.okuma} etiket={hat.kaydediyor ? "Kaydı durdur" : "Dinlemeye başla"}
           onClick={() => {
+            // 0.12.0: ilk kayıttan önce bir kez — çevredekilere haber verme sorumluluğu kullanıcınındır (TCK 133, hukuki risk notu).
+            if (!hat.kaydediyor && !rizaVar("kayit-rizasi")) { setRizaSor(true); return; }
             // Telefon dokunur dokunmaz cebe girer: başladığı ve durduğu dokunuşla da anlaşılsın.
             void Haptics.impact({ style: hat.kaydediyor ? ImpactStyle.Light : ImpactStyle.Medium }).catch(() => undefined);
             void (hat.kaydediyor ? hat.kayitDurdur() : hat.kayitBaslat());
@@ -270,6 +273,12 @@ function Dinle({ git }: { git: (s: Sekme) => void }) {
           )}
         </Halka>
       </div>
+      {rizaSor && !hat.kaydediyor && (
+        <div className="riza">
+          <p className="aciklama">Kaydettiğin konuşmadaki kişilere haber vermek senin sorumluluğunda.</p>
+          <button className="dugme birincil" onClick={() => { rizaKaydet("kayit-rizasi"); setRizaSor(false); void hat.kayitBaslat(); }}>Anladım, başla</button>
+        </div>
+      )}
       {hat.kaydediyor && <p className="aciklama halka-durum">Ekranı kilitleyebilirsin.</p>}
       {hat.kaydediyor && hat.canli && <ParcaDurumu />}
 
@@ -610,6 +619,15 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
   );
 }
 
+// ---------------------------------------------------------------- Rıza (0.15.5, 0.12.0'dan)
+// Onayın kendisi ve zamanı yalnız bu telefonda durur; kanıt kullanıcının cihazındadır.
+function rizaVar(ad: string): boolean {
+  try { return !!localStorage.getItem(ad); } catch { return false; }
+}
+function rizaKaydet(ad: string) {
+  try { localStorage.setItem(ad, new Date().toISOString()); } catch { /* depo yoksa her seferinde sorulur */ }
+}
+
 // ---------------------------------------------------------------- Sesini tanıt
 
 const EN_AZ_SN = 15;
@@ -618,6 +636,7 @@ const HEDEF_SN = 25;
 function SesiniTanit({ kapat }: { kapat: () => void }) {
   useSaniye(hat.sesKaydi === "kayitta");
   const [bitti, setBitti] = useState(false);
+  const [onay, setOnay] = useState(() => rizaVar("ses-izi-rizasi"));
   const gecen = hat.sesKaydi === "kayitta" && hat.kayitBaslangic ? (Date.now() - hat.kayitBaslangic) / 1000 : 0;
 
   useEffect(() => () => {
@@ -662,11 +681,19 @@ function SesiniTanit({ kapat }: { kapat: () => void }) {
       <div className="ses-kaydi">
         <Halka kucuk kayitta={hat.sesKaydi === "kayitta"} seviye={hat.seviye} okuma={hat.okuma} ilerleme={Math.min(1, gecen / HEDEF_SN)}
           etiket={hat.sesKaydi === "kayitta" ? "Okumayı bitir" : "Okumaya başla"}
-          onClick={() => void (hat.sesKaydi === "kayitta" ? (gecen >= EN_AZ_SN ? bitir() : undefined) : hat.sesKaydiBaslat())}>
+          onClick={() => void (hat.sesKaydi === "kayitta" ? (gecen >= EN_AZ_SN ? bitir() : undefined) : onay ? hat.sesKaydiBaslat() : undefined)}>
           {hat.sesKaydi === "kayitta" ? <span className="sayac">{sure(gecen * 1000)}</span> : <Mic size={24} strokeWidth={1.6} />}
         </Halka>
         <div>
-          {hat.sesKaydi === "yok" && <p className="aciklama">Halkaya dokun ve okumaya başla.</p>}
+          {hat.sesKaydi === "yok" && (onay
+            ? <p className="aciklama">Halkaya dokun ve okumaya başla.</p>
+            : (
+              // Ses izi biyometrik veridir: ayrı ve açık onay (GDPR m. 9, KVKK m. 6, BIPA). Geri almak için ses izini sil.
+              <label className="onay">
+                <input type="checkbox" checked={onay} onChange={(e) => { if (e.target.checked) { rizaKaydet("ses-izi-rizasi"); setOnay(true); } }} />
+                <span>Ses izim yalnız bilgisayarımda tutulsun ve notlarda beni ayırmak için kullanılsın.</span>
+              </label>
+            ))}
           {hat.sesKaydi === "kayitta" && (
             <p className="aciklama">{gecen < EN_AZ_SN ? `Oku; ${Math.ceil(EN_AZ_SN - gecen)} saniye daha.` : "Yeterli. Bitirmek için dokun ya da okumayı tamamla."}</p>
           )}
