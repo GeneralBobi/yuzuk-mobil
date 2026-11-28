@@ -68,11 +68,6 @@ export interface YuzukEklentisi {
   /** 0.12.0: dokunulan bildirim (uygulama kapalıyken açıldıysa bir kez verilir); yoksa boş nesne. */
   bildirimAl(): Promise<OkunanBildirim>;
   addListener(olay: "bildirim", dinleyici: (b: OkunanBildirim) => void): Promise<{ remove: () => Promise<void> }>;
-  /** 0.13.0: telefon, bilgisayarsız AI bağlantısı için kendisi Claudian cihazı olur (eşleştirmenin yanında ikinci yol). */
-  dogrudanDurum(): Promise<DogrudanDurum>;
-  dogrudanAyarla(o: { acik?: boolean; yazma?: boolean; vault?: string; pencere?: boolean }): Promise<DogrudanDurum>;
-  dogrudanKarar(o: { id: string; evet: boolean }): Promise<DogrudanDurum>;
-  dogrudanIzinKaldir(o: { id: string }): Promise<DogrudanDurum>;
   vaultListe(o: { agac: string }): Promise<{ dosyalar: { yol: string; boyut: number; mtime: number }[] }>;
   vaultOku(o: { agac: string; yol: string }): Promise<{ icerik: string }>;
   addListener(olay: "paylasim", dinleyici: (p: Paylasim) => void): Promise<{ remove: () => Promise<void> }>;
@@ -85,18 +80,6 @@ export interface Paylasim {
   yol?: string;
   ad?: string | null;
   hata?: string;
-}
-
-export interface DogrudanDurum {
-  acik: boolean;
-  calisiyor: boolean;
-  baglanti: "kapali" | "baglaniyor" | "cevrimici" | "cevrimdisi";
-  hata: string | null;
-  yazma: boolean;
-  pencere: number; // onaysız bağlanma penceresinin kalan ms'si
-  adresler: { claude?: string; chatgpt?: string };
-  bekleyen: { id: string; kod: string; ad: string; ai: string; hedef: string; kapsam: string }[];
-  izinler: { id: string; ad: string; ai: string; kapsam: string; zaman: number; son: number }[];
 }
 
 /** Dokunularak açılan bildirimin içeriği. */

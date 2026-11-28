@@ -21,15 +21,19 @@ export const INTERNET_YOK: Baglanti = { durum: "kapali", etiket: "internet yok",
 
 const NEDEN: Record<string, { durum: BaglantiDurumu; etiket: string }> = {
   onay: { durum: "onay", etiket: "onay bekliyor" },
+  bilgisayar_onayi: { durum: "kapali", etiket: "bilgisayar onayı bekliyor" },
   dugum: { durum: "kapali", etiket: "bilgisayar kapalı" },
   musait: { durum: "kapali", etiket: "bilgisayar pilde" },
   access: { durum: "kapali", etiket: "ulaşılamıyor" },
 };
 
 export function saglikSonucu(status: number, govde: SaglikGovdesi = {}): Baglanti {
-  if (status === 401) return { durum: "anahtar", etiket: "yeniden eşleştir", metin: "Yeniden eşleştir." };
-  // Onay bekleyen cihaza sağlık ucu 503, öteki uçlar 403 döner; ikisi de aynı durumdur.
-  if (status === 503 || (status === 403 && govde.tur === "onay")) {
+  if (status === 401) return { durum: "anahtar", etiket: "yeniden eşleştir", metin: "Bilgisayarda Claudian → Yüzük → Telefonu bağla bölümünden yeni kod al." };
+  if ((status === 503 || status === 403) && govde.tur === "onay") {
+    const metin = "Bilgisayarda Claudian → Yüzük → Telefonu bağla bölümünden yeni kod al. Telefonun onayı bu kodla tamamlanır.";
+    return { ...NEDEN.onay, metin };
+  }
+  if (status === 503) {
     const n = NEDEN[govde.tur ?? ""] ?? { durum: "kapali" as const, etiket: "bilgisayar kapalı" };
     return { ...n, metin: govde.detail ?? "Bilgisayar çevrim dışı. Kayıtlar telefonda." };
   }

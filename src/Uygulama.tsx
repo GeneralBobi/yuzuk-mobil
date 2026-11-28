@@ -3,7 +3,6 @@ import { App as CapApp } from "@capacitor/app";
 import { ArrowLeft, ArrowRight, Check, FileAudio, Mic, NotebookPen, Settings, Square } from "lucide-react";
 import { durak, hat, YAZICILAR, type Oturum } from "./hat";
 import { Halka } from "./Halka";
-import { Dogrudan } from "./Dogrudan";
 import { yerel, type OkunanBildirim, type Paylasim } from "./yerel";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
@@ -47,12 +46,12 @@ function EslestirmeOnayi() {
   return (
     <div className="onay-perde" role="dialog" aria-modal="true" aria-labelledby="onay-baslik">
       <div className="onay-kutu">
-        <h2 id="onay-baslik">{eslesik ? "Başka bir bilgisayara geçilsin mi?" : "Bu telefon eşleştirilsin mi?"}</h2>
+        <h2 id="onay-baslik">{eslesik ? "Telefon yeniden eşleştirilsin mi?" : "Bu telefon eşleştirilsin mi?"}</h2>
         <p className="aciklama">
           <code>{kod.slice(0, 4)}-{kod.slice(4)}</code> · Kodu kendi Claudian'ından almadıysan vazgeç.
         </p>
         {eslesik && bekleyen > 0 && (
-          <p className="aciklama">Gönderilmemiş {bekleyen} kayıt kendiliğinden taşınmaz.</p>
+          <p className="aciklama">Hesap değişirse gönderilmemiş {bekleyen} kayıt kendiliğinden taşınmaz.</p>
         )}
         <div className="satir-eylem">
           <button className="dugme birincil" onClick={() => hat.kodOnayla()}>Eşleştir</button>
@@ -89,8 +88,6 @@ export function Uygulama() {
   const [akis, setAkis] = useState<Akis>(null);
   const [okunan, setOkunan] = useState<OkunanBildirim | null>(null);
 
-  // 0.13.0: "AI'lara doğrudan bağlan" açık bırakıldıysa arka plan servisi uygulama açılınca yeniden başlar.
-  useEffect(() => { void yerel.dogrudanAyarla({}).catch(() => undefined); }, []);
   useEffect(() => {
     void hat.baslat().then(() => hat.esitlemeGerekirse());
     // Sistem çubuğu boşlukları sayfa hazırken yeniden yazılsın (üç tuşlu gezinmede alt menü boşluk bırakıyordu).
@@ -432,6 +429,7 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
   const a = hat.ayarlar;
   const eslesti = !!a.anahtar;
   const b = hat.baglanti;
+  const kodGerekli = !eslesti || b.durum === "onay" || b.durum === "anahtar";
   const iz = hat.sesIzi;
 
   return (
@@ -448,28 +446,23 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
           </div>
           {eslesti ? (
             <>
-              <p className="deger"><span className={`nokta ${b.durum === "bagli" ? "acik" : ""}`} />{a.sunucu.replace("https://", "")}</p>
               {b.metin && b.durum !== "bagli" && <p className="aciklama">{b.metin}</p>}
               <div className="satir-eylem">
                 <button className="metin-dugme kor" onClick={() => void hat.baglantiDene()}>Bağlantıyı dene</button>
               </div>
             </>
-          ) : (
+          ) : null}
+          {kodGerekli && (
             <>
-              <p className="aciklama">Claudian → Yüzük → Telefonu bağla</p>
+              {!eslesti && <p className="aciklama">Bilgisayarda Claudian → Yüzük → Telefonu bağla</p>}
               <div className="kod-satiri">
                 <input className="girdi" value={kod} onChange={(e) => setKod(e.target.value.toUpperCase())} placeholder="ABCD2345"
                   autoCapitalize="characters" autoCorrect="off" spellCheck={false} aria-label="Eşleştirme kodu" />
-                <button className="dugme birincil" disabled={kod.replace(/[^A-Z0-9]/g, "").length < 8} onClick={() => void hat.eslestir(kod)}>Eşleştir</button>
+                <button className="dugme birincil" disabled={kod.replace(/[^A-Z0-9]/g, "").length !== 8 || hat.eslestirme?.durum === "bekliyor"} onClick={() => eslesti ? hat.kodGeldi(kod) : void hat.eslestir(kod)}>Eşleştir</button>
               </div>
             </>
           )}
-          {!a.anahtar && hat.googleTestAdresi && <button className="dugme" disabled={hat.eslestirme?.durum === "bekliyor"} onClick={() => void hat.googleGiris()}>Google ile devam et</button>}
-          {<div className="bulut-beta">
-            <button className="dugme" disabled aria-describedby="bulut-beta-bilgi">Bulut ile devam et <span className="etiket">beta</span></button>
-            <p id="bulut-beta-bilgi" className="aciklama">Yakında · Şimdilik kullanılamıyor.</p>
-          </div>}
-          {hat.eslestirme && (
+          {hat.eslestirme && (hat.eslestirme.durum !== "tamam" || b.durum === "bilinmiyor") && (
             <p className={hat.eslestirme.durum === "hata" ? "hata" : "aciklama"}>{hat.eslestirme.metin}</p>
           )}
         </div>
@@ -486,9 +479,6 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
             {hat.vaultHatasi && <p className="hata">{hat.vaultHatasi}</p>}
           </div>
         </div>
-
-        {/* 0.13.0: eşleştirmenin yanında ikinci yol; biri diğerini kapatmaz. */}
-        <Dogrudan />
 
         {a.vault && eslesti && (
           <div className="satir">
@@ -515,25 +505,6 @@ function Ayarlar({ ac }: { ac: (a: Akis) => void }) {
             </div>
           </div>
         )}
-
-        {eslesti && (
-          <div className="satir">
-            <div className="satir-bas">
-              <h2>Hatırlatıcılar</h2>
-              <span className={`etiket ${hat.hatirlaticilar.son ? "" : "soluk"}`}>
-                {hat.hatirlaticilar.son ? `${hat.hatirlaticilar.sayi} kurulu` : "bakılmadı"}
-              </span>
-            </div>
-            {hat.hatirlaticilar.son && (
-              <p className="deger">son bakış: {gunAdi(hat.hatirlaticilar.son).toLocaleLowerCase("tr")} {saat(hat.hatirlaticilar.son)}</p>
-            )}
-            {hat.hatirlaticilar.metin && <p className="aciklama" style={{ marginTop: 6 }}>{hat.hatirlaticilar.metin}</p>}
-            <div className="satir-eylem">
-              <button className="metin-dugme kor" onClick={() => void hat.hatirlaticiCek()}>Şimdi bak</button>
-            </div>
-          </div>
-        )}
-
 
         <div className="satir">
           <div className="satir-bas">

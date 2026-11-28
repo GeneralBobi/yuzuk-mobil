@@ -63,12 +63,6 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- 0.13.0: "AI'lara doğrudan bağlan" açıkken telefonu relay'de çevrimiçi tutar (Claude/ChatGPT → telefondaki vault). -->
-        <service
-            android:name=".HafizaServisi"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
         <!-- 0.12.0: bulutun zili (FCM). Gövde yalnız "esitle"/"not" işareti taşır; içerik telefon kendi anahtarıyla çeker. -->
         <service
             android:name=".YuzukMesajServisi"

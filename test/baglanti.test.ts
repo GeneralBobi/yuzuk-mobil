@@ -6,7 +6,7 @@ test("onay bekleyen cihaz 'ulaşılamıyor' değil 'onay bekliyor' görünür", 
   const b = saglikSonucu(503, { detail: "Cihazın onay bekliyor.", tur: "onay" });
   assert.equal(b.durum, "onay");
   assert.equal(b.etiket, "onay bekliyor");
-  assert.equal(b.metin, "Cihazın onay bekliyor.");
+  assert.match(b.metin, /Claudian → Yüzük → Telefonu bağla/);
   assert.equal(saglikSonucu(403, { tur: "onay" }).durum, "onay");
 });
 

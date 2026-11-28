@@ -765,46 +765,6 @@ public class YuzukEklentisi extends Plugin {
         notifyListeners("bildirim", r, true);
     }
 
-    // ------------------------------------------------ AI'lara doğrudan bağlan (0.13.0)
-
-    /** Durum; sır dışarı çıkmaz. */
-    @PluginMethod
-    public void dogrudanDurum(PluginCall call) {
-        try { call.resolve(JSObject.fromJSONObject(DogrudanCihaz.gorunum(getContext()))); }
-        catch (Exception e) { call.reject(e.getMessage() != null ? e.getMessage() : e.toString()); }
-    }
-
-    /** {acik?, yazma?, vault?, pencere?}: aç/kapat, yazma izni, vault, 5 dakikalık onaysız bağlanma penceresi. */
-    @PluginMethod
-    public void dogrudanAyarla(PluginCall call) {
-        try {
-            Context c = getContext();
-            Boolean acik = call.getBoolean("acik");
-            if (Boolean.TRUE.equals(acik) || Boolean.TRUE.equals(call.getBoolean("pencere", false))) DogrudanCihaz.hazirla(c, call.getString("vault"));
-            DogrudanCihaz.ayarla(c, acik, call.getBoolean("yazma"), call.getString("vault"), Boolean.TRUE.equals(call.getBoolean("pencere", false)));
-            boolean simdi = DogrudanCihaz.durum(c).optBoolean("acik");
-            if (simdi && !HafizaServisi.calisiyor) HafizaServisi.baslat(c);
-            if (!simdi && HafizaServisi.calisiyor) HafizaServisi.durdur(c);
-            call.resolve(JSObject.fromJSONObject(DogrudanCihaz.gorunum(c)));
-        } catch (Exception e) { call.reject(e.getMessage() != null ? e.getMessage() : e.toString()); }
-    }
-
-    @PluginMethod
-    public void dogrudanKarar(PluginCall call) {
-        try {
-            DogrudanCihaz.karar(getContext(), call.getString("id", ""), Boolean.TRUE.equals(call.getBoolean("evet", false)));
-            call.resolve(JSObject.fromJSONObject(DogrudanCihaz.gorunum(getContext())));
-        } catch (Exception e) { call.reject(e.getMessage() != null ? e.getMessage() : e.toString()); }
-    }
-
-    @PluginMethod
-    public void dogrudanIzinKaldir(PluginCall call) {
-        try {
-            DogrudanCihaz.izinKaldir(getContext(), call.getString("id", ""));
-            call.resolve(JSObject.fromJSONObject(DogrudanCihaz.gorunum(getContext())));
-        } catch (Exception e) { call.reject(e.getMessage() != null ? e.getMessage() : e.toString()); }
-    }
-
     @PluginMethod
     public void bildirimAl(PluginCall call) {
         JSObject r = bekleyenBildirim != null ? bekleyenBildirim : new JSObject();

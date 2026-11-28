@@ -438,7 +438,7 @@ class Hat {
       const izi = (await yerel.cihazIzi().catch(() => ({} as { izi?: string }))).izi;
       const r = await agIstek(`${this.ayarlar.sunucu || VARSAYILAN_SUNUCU}/v1/eslestir`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...this.basliklar, "Content-Type": "application/json" },
         body: JSON.stringify({ kod: temiz, ad: "Android telefon", ...(izi ? { izi } : {}) }),
       });
       if (r.status === 403) throw new Error("Kod geçersiz ya da kullanılmış");
@@ -459,7 +459,9 @@ class Hat {
       this.ayarla({ sunucu: j.sunucu, anahtar: j.anahtar });
       this.eslestirme = { durum: "tamam", metin: eslesmeMetni(j.onay) };
       // Hesap bölümü (telefonlar, "Hesabımı sil") eşleşir eşleşmez görünsün; onay beklerken de (0.9.0).
-      void this.baglantiDene().then(() => Promise.all([this.hesapYukle(), this.hatirlaticiCek()]));
+      void this.baglantiDene().then(() => Promise.all([
+        this.hesapYukle(), this.hatirlaticiCek(), this.baglanti.durum === "bagli" ? this.ilerlet() : undefined,
+      ]));
     } catch (e) {
       this.eslestirme = { durum: "hata", metin: `Eşleşmedi: ${(e as Error).message}` };
     }
